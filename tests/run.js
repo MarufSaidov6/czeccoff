@@ -23,6 +23,7 @@ eval(grab(/function sentenceStarts[\s\S]*?\n}/, 'sentenceStarts'));
 eval(grab(/const meas[\s\S]*?function orpCharIndex[\s\S]*?\n  return best;\n}/, 'orp'));
 eval(grab(/function wordDelay[\s\S]*?\n}/, 'wordDelay'));
 eval(grab(/function plural[\s\S]*?\n}/, 'plural'));
+eval(grab(/function edgePunct[\s\S]*?\n}/, 'edgePunct'));
 
 // --- раннер ---
 let pass=0, fail=0; const fails=[];
@@ -137,6 +138,23 @@ console.log('— Секция 2: fb2 (кодировки) —');
   let ok = true;
   try { const d = new TextDecoder('windows-1251'); ok = d.decode(Buffer.from([0xF1]))==='с'; } catch(e){ ok=false; }
   t('FB2-02b','TextDecoder windows-1251 доступен и верен', ok);
+}
+
+console.log('— Секция 9: краевая пунктуация —');
+{
+  const ep = w => edgePunct(w);
+  let r = ep('«Внимание!»');
+  t('PNC-01','кавычки и ! как краевые', r.lead==='«' && r.core==='Внимание' && r.trail==='!»', JSON.stringify(r));
+  r = ep('кто-то');
+  t('PNC-02','внутренний дефис остаётся в core', r.lead==='' && r.core==='кто-то' && r.trail==='', JSON.stringify(r));
+  r = ep('— Да?');
+  t('PNC-03','тире реплики — ведущий знак', r.lead==='— ' && r.core==='Да' && r.trail==='?', JSON.stringify(r));
+  r = ep('слово');
+  t('PNC-04','слово без краевых', r.lead==='' && r.core==='слово' && r.trail==='');
+  r = ep('...');
+  t('PNC-05','только знаки: core целиком, не падает', r.lead==='' && r.core==='...' && r.trail==='');
+  r = ep('«цитата»');
+  t('PNC-06','парные кавычки', r.lead==='«' && r.core==='цитата' && r.trail==='»');
 }
 
 console.log('\n========================================');

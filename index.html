@@ -609,6 +609,23 @@ function displayWord(t) {
   return t.w;
 }
 
+// Сегментация краевой пунктуации: lead/trail — крайние раны не-букв/не-цифр
+// (кавычки, тире реплики, точки/?!), core — середина. Внутренние дефисы
+// (кто-то) остаются в core. Самодостаточна (свой isL) — для юнит-тестов.
+function edgePunct(word) {
+  const chars = [...word];
+  const isL = ch => /[\p{L}\p{N}]/u.test(ch);
+  let a = 0, b = chars.length - 1;
+  while (a <= b && !isL(chars[a])) a++;
+  while (b >= a && !isL(chars[b])) b--;
+  if (a > b) return { lead: '', core: word, trail: '' };
+  return {
+    lead: chars.slice(0, a).join(''),
+    core: chars.slice(a, b + 1).join(''),
+    trail: chars.slice(b + 1).join(''),
+  };
+}
+
 function renderWord() {
   const t = state.tokens[state.idx];
   if (!t) return;
