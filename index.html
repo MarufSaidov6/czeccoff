@@ -15,6 +15,7 @@
     --accent-dim: #b8453d;
     --guide: #3a3a44;
     --punct: #5d5b66;
+    --guide-strong: #8a8a98;
     --wsize: 1;
     --wfont: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
@@ -83,6 +84,11 @@
 
   .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; cursor: pointer; overflow: hidden; }
   .reticle { width: min(86vw, 600px); }
+  .reticle { position: relative; }
+  .reticle .word-row { position: relative; z-index: 1; }
+  .axis-line { position: absolute; left: 50%; top: 0; bottom: 0; transform: translateX(-50%); width: 1px; background: rgba(255,255,255,.10); z-index: 0; display: none; }
+  #reader.axis .axis-line { display: block; }
+  #reader.axis .guide-line .tick { background: var(--guide-strong); }
   .guide-line { display: flex; justify-content: center; }
   .guide-line .tick { width: 2px; height: 14px; background: var(--guide); }
   .word-row {
@@ -231,6 +237,7 @@
     <div id="pausedLabel">Пауза — пробел или тап</div>
     <div id="countdown">• • •</div>
     <div class="reticle">
+      <div class="axis-line"></div>
       <div class="guide-line"><div class="tick"></div></div>
       <div class="word-row" id="wordRow">
         <span class="pre"></span><span class="orp"></span><span class="post"></span>
