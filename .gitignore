@@ -1,0 +1,11 @@
+# OS / редакторы
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Личные книги — НЕ публиковать в открытый репозиторий
+/my-books/
+*.private.fb2
+*.private.txt

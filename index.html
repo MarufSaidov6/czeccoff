@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Flash Reader — быстрое чтение</title>
+<style>
+  :root {
+    --bg: #16161a;
+    --surface: #1f1f26;
+    --surface-2: #2a2a33;
+    --text: #e8e6e1;
+    --muted: #8a8894;
+    --accent: #ff5a4e;
+    --accent-dim: #b8453d;
+    --guide: #3a3a44;
+    --wsize: 1;
+    --wfont: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; overflow: hidden;
+  }
+  .screen { display: none; height: 100vh; height: 100dvh; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  /* ===== Home ===== */
+  #home { padding: 24px; max-width: 640px; margin: 0 auto; width: 100%; overflow-y: auto; }
+  #home h1 { font-size: 28px; margin: 24px 0 4px; }
+  #home h1 .dot { color: var(--accent); }
+  #home .sub { color: var(--muted); margin-bottom: 24px; font-size: 15px; }
+  textarea {
+    width: 100%; min-height: 140px; background: var(--surface); color: var(--text);
+    border: 1px solid var(--guide); border-radius: 12px; padding: 14px;
+    font-size: 15px; resize: vertical; font-family: inherit;
+  }
+  textarea:focus { outline: none; border-color: var(--muted); }
+  .row { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .btn {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--guide);
+    border-radius: 10px; padding: 12px 20px; font-size: 15px; cursor: pointer; transition: background .15s;
+  }
+  .btn:hover { background: #34343f; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #16161a; font-weight: 600; }
+  .btn.primary:hover { background: #ff6f64; }
+  #resumeCard {
+    display: none; margin-top: 20px; background: var(--surface); border: 1px solid var(--guide);
+    border-radius: 12px; padding: 16px; cursor: pointer;
+  }
+  #resumeCard:hover { border-color: var(--muted); }
+  #resumeCard .t { font-weight: 600; margin-bottom: 4px; }
+  #resumeCard .p { color: var(--muted); font-size: 14px; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 24px; line-height: 1.6; }
+
+  #daysCard { margin-top: 20px; background: var(--surface); border: 1px solid var(--guide); border-radius: 12px; padding: 16px; display: none; }
+  #daysCard .t { font-size: 14px; color: var(--muted); margin-bottom: 10px; }
+  #daysCard .today { font-size: 15px; margin-bottom: 12px; }
+  #daysCard .today b { color: var(--accent); }
+  .bars { display: flex; gap: 6px; align-items: flex-end; height: 56px; }
+  .bars .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .bars .bar { width: 100%; background: var(--accent-dim); border-radius: 3px 3px 0 0; min-height: 2px; }
+  .bars .col.cur .bar { background: var(--accent); }
+  .bars .lbl { font-size: 10px; color: var(--muted); }
+
+  /* ===== Reader ===== */
+  #reader { user-select: none; }
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: var(--muted); font-size: 14px; transition: opacity .35s; }
+  .topbar .title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar button { background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 6px; }
+  .topbar button:hover { color: var(--text); }
+  #progressWrap { height: 14px; display: flex; align-items: center; cursor: pointer; transition: opacity .35s; }
+  #progressTrack { height: 4px; width: 100%; background: var(--surface-2); border-radius: 2px; }
+  #progressBar { height: 100%; width: 0; background: var(--accent-dim); border-radius: 2px; transition: width .25s; }
+  #progressWrap:hover #progressTrack { height: 8px; }
+  .controls { padding: 12px 18px calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; transition: opacity .35s; }
+
+  /* фокус-режим: при чтении интерфейс тает, остаётся только слово */
+  #reader.focus .topbar, #reader.focus .controls, #reader.focus #progressWrap { opacity: 0; pointer-events: none; }
+
+  .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; cursor: pointer; overflow: hidden; }
+  .reticle { width: min(86vw, 600px); }
+  .guide-line { display: flex; justify-content: center; }
+  .guide-line .tick { width: 2px; height: 14px; background: var(--guide); }
+  .word-row {
+    /* minmax(0,1fr): колонки всегда равны, длинный хвост слова переполняется
+       наружу, но якорь остаётся строго в центре под метками */
+    display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: baseline;
+    font-size: calc(clamp(34px, 7.5vw, 64px) * var(--wsize));
+    font-family: var(--wfont);
+    font-weight: 500; letter-spacing: .01em; min-height: 1.45em; font-variant-ligatures: none;
+  }
+  .word-row .pre { text-align: right; white-space: pre; }
+  .word-row .orp { color: var(--accent); text-align: center; white-space: pre; }
+  .word-row .post { text-align: left; white-space: pre; }
+  body[data-trans="fade"] .word-row { transition: opacity .07s linear; }
+
+  #dlgMark { text-align: center; height: 20px; font-size: 14px; color: var(--accent-dim); letter-spacing: .1em; visibility: hidden; margin-top: 2px; }
+
+  #countdown {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -130px);
+    font-size: 15px; color: var(--muted); letter-spacing: .3em; display: none;
+  }
+
+  #context {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    max-width: min(88vw, 700px); text-align: center; color: var(--muted);
+    font-size: 15px; line-height: 1.55; display: none; padding: 0 12px;
+  }
+  #context .prev { opacity: .45; font-size: 13px; display: block; margin-bottom: 6px; }
+  #context .cur { color: var(--text); background: var(--surface-2); border-radius: 4px; padding: 0 3px; }
+  #pausedLabel {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    color: var(--muted); font-size: 12px; letter-spacing: .15em; text-transform: uppercase; display: none;
+  }
+
+  #toast {
+    position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%);
+    background: var(--surface-2); border: 1px solid var(--guide); color: var(--text);
+    border-radius: 20px; padding: 8px 18px; font-size: 14px; opacity: 0;
+    transition: opacity .3s; pointer-events: none; z-index: 20;
+  }
+  #toast.show { opacity: 1; }
+  #toast .up { color: var(--ok, #6fcf97); }
+  #toast .down { color: var(--accent); }
+
+  .speedline { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .speedline .wpm { font-size: 21px; font-weight: 600; min-width: 100px; text-align: center; }
+  .speedline .wpm small { font-size: 11px; color: var(--muted); font-weight: 400; display: block; }
+  .ctl { background: var(--surface-2); border: 1px solid var(--guide); color: var(--text); border-radius: 50%; width: 44px; height: 44px; font-size: 18px; cursor: pointer; }
+  .ctl:hover { background: #34343f; }
+  .ctl.play { width: 58px; height: 58px; font-size: 22px; background: var(--accent); border-color: var(--accent); color: #16161a; }
+  .statline { display: flex; justify-content: center; gap: 22px; color: var(--muted); font-size: 13px; }
+  .statline b { color: var(--text); font-weight: 600; }
+  .keys { text-align: center; color: var(--guide); font-size: 12px; }
+  @media (max-width: 600px) { .keys { display: none; } }
+
+  /* ===== Оверлеи: настройки, финиш, сложные места ===== */
+  .overlay { position: fixed; inset: 0; background: rgba(10,10,14,.65); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .overlay.open { display: flex; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--guide); border-radius: 16px;
+    padding: 22px; width: min(92vw, 440px); max-height: 86vh; overflow-y: auto;
+  }
+  .panel h2 { font-size: 17px; margin-bottom: 16px; }
+  .set { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--surface-2); }
+  .set:last-of-type { border: none; }
+  .set .l { font-size: 14px; }
+  .set .d { font-size: 12px; color: var(--muted); margin-top: 2px; max-width: 230px; }
+  .set select { background: var(--surface-2); color: var(--text); border: 1px solid var(--guide); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+  .set input[type=range] { accent-color: var(--accent); }
+  .switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .tr { position: absolute; inset: 0; background: var(--surface-2); border: 1px solid var(--guide); border-radius: 12px; cursor: pointer; transition: .15s; }
+  .switch .tr::before { content: ""; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); top: 2px; left: 2px; transition: .15s; }
+  .switch input:checked + .tr { background: var(--accent-dim); border-color: var(--accent-dim); }
+  .switch input:checked + .tr::before { transform: translateX(20px); background: var(--text); }
+  .panel .close { margin-top: 18px; width: 100%; }
+
+  /* финиш */
+  #finishStats { display: flex; justify-content: space-around; text-align: center; margin: 18px 0; }
+  #finishStats .v { font-size: 26px; font-weight: 700; }
+  #finishStats .k { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  #finishReg { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; font-size: 14px; color: var(--muted); display: none; margin-bottom: 6px; }
+  #finishReg b { color: var(--text); }
+  .panel .btnrow { display: flex; gap: 10px; margin-top: 16px; }
+  .panel .btnrow .btn { flex: 1; }
+
+  /* сложные места */
+  #regList { font-size: 15px; line-height: 1.65; color: var(--text); }
+  #regList .item { padding: 12px 0; border-bottom: 1px solid var(--surface-2); }
+  #regList .item:last-child { border: none; }
+  #regList .n { color: var(--accent-dim); font-size: 12px; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ===================== HOME ===================== -->
+<div id="home" class="screen active">
+  <h1>Flash Reader<span class="dot">.</span></h1>
+  <p class="sub">Читай по одному слову — глаза не двигаются, скорость растёт.</p>
+
+  <div id="resumeCard">
+    <div class="t" id="resumeTitle"></div>
+    <div class="p" id="resumeInfo"></div>
+  </div>
+
+  <div id="daysCard">
+    <div class="t">Статистика чтения</div>
+    <div class="today" id="todayLine"></div>
+    <div class="bars" id="daysBars"></div>
+  </div>
+
+  <div class="row" style="margin-top:20px">
+    <textarea id="pasteArea" placeholder="Вставь текст сюда…"></textarea>
+  </div>
+  <div class="row">
+    <button class="btn primary" id="readPasted">Читать текст</button>
+    <button class="btn" id="fileBtn">Открыть файл (.fb2 / .txt)</button>
+    <input type="file" id="fileInput" accept=".fb2,.txt,.xml" hidden>
+  </div>
+
+  <div class="row" id="samplesRow" style="display:none;flex-direction:column;align-items:flex-start;gap:8px;margin-top:4px">
+    <div class="hint" style="margin:0">Или попробуй на примере:</div>
+    <div class="row" id="samplesBtns" style="flex-wrap:wrap;gap:8px;margin:0"></div>
+  </div>
+
+  <p class="hint">
+    Красная буква — якорь (ORP): держи взгляд на ней. Начни с 300 сл/мин.
+    Тренер скорости (включается в ⚙) сам прибавляет темп, пока чтение идёт гладко,
+    и снижает после перемоток. Клик по прогресс-бару — перемотка.
+  </p>
+</div>
+
+<!-- ===================== READER ===================== -->
+<div id="reader" class="screen">
+  <div class="topbar">
+    <button id="backBtn" title="На главную">←</button>
+    <button id="restartBtn" title="В начало">⟲</button>
+    <div class="title" id="docTitle"></div>
+    <div id="progressPct">0%</div>
+    <button id="setBtn" title="Настройки">⚙</button>
+  </div>
+  <div id="progressWrap"><div id="progressTrack"><div id="progressBar"></div></div></div>
+
+  <div class="stage" id="stage">
+    <div id="pausedLabel">Пауза — пробел или тап</div>
+    <div id="countdown">• • •</div>
+    <div class="reticle">
+      <div class="guide-line"><div class="tick"></div></div>
+      <div class="word-row" id="wordRow">
+        <span class="pre"></span><span class="orp"></span><span class="post"></span>
+      </div>
+      <div class="guide-line"><div class="tick"></div></div>
+      <div id="dlgMark">— реплика</div>
+    </div>
+    <div id="context"></div>
+  </div>
+
+  <div class="controls">
+    <div class="speedline">
+      <button class="ctl" id="slower">−</button>
+      <button class="ctl" id="prevSent" title="Предыдущее предложение">«</button>
+      <button class="ctl play" id="playBtn">▶</button>
+      <button class="ctl" id="nextSent" title="Следующее предложение">»</button>
+      <button class="ctl" id="faster">+</button>
+    </div>
+    <div class="speedline">
+      <div class="wpm"><span id="wpmVal">300</span><small>задано, сл/мин</small></div>
+      <div class="wpm"><span id="wpmReal">—</span><small>фактически, сл/мин</small></div>
+    </div>
+    <div class="statline">
+      <span>прочитано: <b id="statWords">0</b></span>
+      <span>время: <b id="statTime">0:00</b></span>
+      <span>осталось: <b id="statLeft">—</b></span>
+    </div>
+    <div class="keys">пробел — старт/пауза · ← → — по предложениям · ↑ ↓ — скорость</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ===================== SETTINGS ===================== -->
+<div id="settings" class="overlay">
+  <div class="panel">
+    <h2>Настройки</h2>
+    <div class="set">
+      <div><div class="l">Тренер скорости</div><div class="d">+10 сл/мин за чистую минуту чтения, −10 за перемотку назад</div></div>
+      <label class="switch"><input type="checkbox" id="trainerChk"><span class="tr"></span></label>
+    </div>
+    <div class="set">
+      <div><div class="l">Размер слова</div></div>
+      <input type="range" id="sizeRange" min="60" max="140" step="5">
+    </div>
+    <div class="set">
+      <div><div class="l">Шрифт</div></div>
+      <select id="fontSel">
+        <option value="sans">Без засечек</option>
+        <option value="serif">С засечками</option>
+      </select>
+    </div>
+    <div class="set">
+      <div><div class="l">Начало реплики</div><div class="d">Как показывать диалоги</div></div>
+      <select id="dlgSel">
+        <option value="merge">Тире со словом</option>
+        <option value="indicator">Индикатор под словом</option>
+        <option value="both">Оба</option>
+      </select>
+    </div>
+    <div class="set">
+      <div><div class="l">Якорная буква</div><div class="d">Где стоит красная буква в слове</div></div>
+      <select id="orpSel">
+        <option value="classic">Классика (Spritz)</option>
+        <option value="early">Ближе к началу</option>
+        <option value="center">Ближе к центру</option>
+      </select>
+    </div>
+    <div class="set">
+      <div><div class="l">Смена слов</div><div class="d">Микро-промежуток снижает «слипание» слов на высокой скорости</div></div>
+      <select id="transSel">
+        <option value="cut">Резкая</option>
+        <option value="gap">Микро-промежуток</option>
+        <option value="fade">Плавная</option>
+      </select>
+    </div>
+    <div class="set">
+      <div><div class="l">Пауза между абзацами</div><div class="d">Последнее слово абзаца держится на экране дольше</div></div>
+      <label class="switch"><input type="checkbox" id="sepChk"><span class="tr"></span></label>
+    </div>
+    <div class="set">
+      <div><div class="l">Умный темп</div><div class="d">Паузы на пунктуации, числах, длинных словах</div></div>
+      <label class="switch"><input type="checkbox" id="smartChk"><span class="tr"></span></label>
+    </div>
+    <button class="btn primary close" id="setClose">Готово</button>
+  </div>
+</div>
+
+<!-- ===================== FINISH ===================== -->
+<div id="finish" class="overlay">
+  <div class="panel">
+    <h2>Готово 🎉</h2>
+    <div id="finishStats">
+      <div><div class="v" id="finW">0</div><div class="k">слов</div></div>
+      <div><div class="v" id="finT">0:00</div><div class="k">время</div></div>
+      <div><div class="v" id="finS">0</div><div class="k">сл/мин факт</div></div>
+    </div>
+    <div id="finishReg"></div>
+    <div class="btnrow">
+      <button class="btn" id="finRegBtn" style="display:none">Сложные места</button>
+      <button class="btn" id="finRestart">⟲ Сначала</button>
+      <button class="btn primary" id="finHome">На главную</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== СЛОЖНЫЕ МЕСТА ===================== -->
+<div id="regModal" class="overlay">
+  <div class="panel">
+    <h2>Места, к которым ты возвращался</h2>
+    <div id="regList"></div>
+    <button class="btn primary close" id="regClose">Понятно</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ============ Настройки ============ */
+const defaults = { size: 100, font: 'sans', dlg: 'merge', sep: true, smart: true, trainer: false, trans: 'cut', orp: 'classic' };
+let settings = { ...defaults, ...JSON.parse(localStorage.getItem('fr_set') || '{}') };
+function applySettings() {
+  document.body.dataset.trans = settings.trans;
+  document.documentElement.style.setProperty('--wsize', settings.size / 100);
+  document.documentElement.style.setProperty('--wfont',
+    settings.font === 'serif' ? 'Georgia, "Times New Roman", serif'
+    : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
+  localStorage.setItem('fr_set', JSON.stringify(settings));
+}
+
+/* ============ IndexedDB (тексты книг не влезают в localStorage) ============ */
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('flashreader', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbSet(k, v) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(v, k);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function idbGet(k) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const q = db.transaction('kv', 'readonly').objectStore('kv').get(k);
+    q.onsuccess = () => res(q.result);
+    q.onerror = () => rej(q.error);
+  });
+}
+
+/* ============ Нормализация текста ============ */
+// Книжные txt имеют перенос строки каждые ~70 символов — это НЕ абзацы.
+// Правило: если в тексте есть пустые строки, одиночный \n — мягкий перенос (склеиваем);
+// если пустых строк нет вообще — каждый \n считается абзацем.
+// Строки, начинающиеся с тире (реплики), всегда остаются отдельными абзацами.
+function normalize(text) {
+  // NFC: «й»/«ё» из двух кодпоинтов (NFD) склеиваются в один,
+  // иначе индекс якоря съезжает и slice режет букву пополам
+  text = text.normalize('NFC');
+  text = text.replace(/\r\n/g, '\n').replace(/­/g, ''); // мягкие переносы-дефисы
+
+  // Три формата книжных txt:
+  // 1) абзацы разделены пустыми строками;
+  // 2) lib.ru: абзац начинается с отступа, строки внутри жёстко перенесены;
+  // 3) ни того ни другого — каждая строка считается абзацем.
+  const hasBlank = /\n[ \t]*\n/.test(text);
+  const hasIndent = /^[ \t]{2,}\S/m.test(text);
+  const paras = [];
+  let buf = [];
+  const flush = () => { if (buf.length) { paras.push(buf.join(' ')); buf = []; } };
+
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) { flush(); continue; }
+    const indented = /^[ \t]{2,}/.test(raw);
+    const isReplica = /^(?:--|[—–-])\s/.test(line);
+    if ((hasIndent && indented) || isReplica || (!hasBlank && !hasIndent)) flush();
+    buf.push(line);
+    // в формате с пустыми строками реплика — всегда отдельный абзац
+    if (isReplica && hasBlank && !hasIndent) flush();
+  }
+  flush();
+  // "--" в старых текстах — это тире, в т.ч. вплотную к слову: «конверт.-- О!»
+  return paras.map(p => p.replace(/\s*--\s*/g, ' — ').replace(/\s+/g, ' ').trim()).join('\n\n');
+}
+
+/* ============ Токенизация ============ */
+const ABBR = new Set([
+  'т.д','т.п','т.е','т.к','т.н','др','пр','см','стр','гл','рис','табл','им',
+  'г','гг','в','вв','н.э','млн','млрд','тыс','руб','коп',
+  'mr','mrs','ms','dr','prof','sr','jr','st','vs','etc','e.g','i.e','no','vol','p','pp'
+]);
+const DASH = /^[—–]$|^-$/;
+
+function isAbbrev(word) {
+  const w = word.replace(/[«»"'()\[\]]/g, '').replace(/\.+$/, '');
+  if (ABBR.has(w.toLowerCase())) return true;
+  if (/^[А-ЯЁA-Z]$/.test(w)) return true;
+  if (/^[а-яa-z]\.[а-яa-z]$/i.test(w)) return true;
+  return false;
+}
+const isNum = w => /^[\d\s.,:%№#]+$/.test(w) && /\d/.test(w);
+
+function tokenize(text) {
+  const tokens = [];
+  const paragraphs = normalize(text).split(/\n\n/).map(p => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  for (let pi = 0; pi < paragraphs.length; pi++) {
+    const para = paragraphs[pi];
+    let words = para.split(' ').filter(Boolean);
+    const isDialog = DASH.test(words[0] || '');
+    const before = tokens.length;
+    const mk = w => ({ w, end: false, comma: false, para: false, dlg: isDialog, dlgStart: false, num: isNum(w), sep: false });
+
+    for (let i = 0; i < words.length; i++) {
+      let w = words[i];
+      if (DASH.test(w) && i + 1 < words.length) w = '— ' + words[++i];
+      while (/\d$/.test(w) && i + 1 < words.length && /^\d{3}\b/.test(words[i + 1])) w += ' ' + words[++i];
+      if (w.length > 18 && w.includes('-') && !w.startsWith('— ')) {
+        const parts = w.split('-');
+        for (let j = 0; j < parts.length; j++)
+          tokens.push(mk(j < parts.length - 1 ? parts[j] + '-' : parts[j]));
+        continue;
+      }
+      tokens.push(mk(w));
+    }
+    for (let i = before; i < tokens.length; i++) {
+      const t = tokens[i];
+      const bare = t.w.replace(/[«»"')\]]+$/g, '');
+      if (/[.!?…]$/.test(bare)) {
+        if (!isAbbrev(bare)) t.end = true;
+        else {
+          // сокращение может закрывать предложение: «и т.д. Новая мысль» —
+          // но инициалы («А. С. Пушкин») концом не считаются никогда
+          const core = bare.replace(/[«»"'()\[\]]/g, '').replace(/\.+$/, '');
+          const isInitial = /^[А-ЯЁA-Z]$/.test(core);
+          const next = tokens[i + 1];
+          if (!isInitial && next && /^[«»"']?[А-ЯЁA-Z]/.test(next.w)) t.end = true;
+        }
+      }
+      else if (/[,;:]$/.test(bare)) t.comma = true;
+      if (t.w.startsWith('— ')) t.comma = true;
+    }
+    if (tokens.length > before) {
+      if (isDialog) tokens[before].dlgStart = true;
+      tokens[tokens.length - 1].para = true;
+    }
+  }
+  return tokens;
+}
+
+function sentenceStarts(tokens) {
+  const starts = [0];
+  for (let i = 0; i < tokens.length - 1; i++)
+    if (tokens[i].end || tokens[i].para || tokens[i].sep) {
+      const n = i + 1;
+      if (tokens[n] && tokens[n].sep) continue;
+      starts.push(n);
+    }
+  return [...new Set(starts)];
+}
+
+/* ============ ORP ============ */
+// Якорь по пикселям, а не по индексу буквы: измеряем слово текущим шрифтом
+// и берём букву, чей центр глифа ближе всего к f·(пиксельная ширина слова).
+// «т» и «ш» имеют разную ширину — индекс буквы это игнорирует, пиксели нет.
+const meas = document.createElement('canvas').getContext('2d');
+const isLetter = ch => /[\p{L}\p{N}]/u.test(ch);
+
+function rowFont(el) {
+  const cs = getComputedStyle(el);
+  return cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+}
+
+// возвращает индекс якоря в массиве символов слова
+function orpCharIndex(chars, font) {
+  if (!chars.length) return 0;
+  if (!chars.some(isLetter)) return Math.floor(chars.length / 2);
+  const f = settings.orp === 'early' ? 0.24 : settings.orp === 'center' ? 0.36 : 0.30;
+  meas.font = font;
+  const ws = chars.map(ch => meas.measureText(ch).width);
+  let a = 0, b = chars.length - 1;
+  while (!isLetter(chars[a])) a++;
+  while (!isLetter(chars[b])) b--;
+  let x0 = 0; for (let i = 0; i < a; i++) x0 += ws[i];
+  let x1 = x0; for (let i = a; i <= b; i++) x1 += ws[i];
+  const target = x0 + (x1 - x0) * f;
+  let best = a, bestD = Infinity, x = 0;
+  for (let i = 0; i < chars.length; i++) {
+    if (i >= a && i <= b && isLetter(chars[i])) {
+      const d = Math.abs(x + ws[i] / 2 - target);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    x += ws[i];
+  }
+  return best;
+}
+
+/* ============ Тайминг ============ */
+function wordDelay(t, baseMs) {
+  if (t.sep) return baseMs * 1.6;
+  if (!settings.smart) return baseMs;
+  let m = 1;
+  const len = t.w.replace(/[^\p{L}\p{N}]/gu, '').length;
+  if (len >= 13) m += 0.6; else if (len >= 9) m += 0.3;
+  if (t.num) m += 1.0;
+  if (t.comma) m += 0.6;
+  if (t.end) m += 1.4;
+  // граница абзаца: последнее слово держится дольше — пауза «конец мысли»
+  if (t.para) m += settings.sep ? 1.3 : 0.5;
+  if (t.dlgStart) m += 0.8;
+  return baseMs * m;
+}
+
+/* ============ FB2 ============ */
+async function parseFb2(file) {
+  const buf = await file.arrayBuffer();
+  const head = new TextDecoder('latin1').decode(buf.slice(0, 200));
+  let enc = 'utf-8';
+  const m = head.match(/encoding=["']([\w-]+)["']/i);
+  if (m) enc = m[1].toLowerCase();
+  let xmlText;
+  try { xmlText = new TextDecoder(enc).decode(buf); }
+  catch { xmlText = new TextDecoder('utf-8').decode(buf); }
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Не удалось разобрать fb2');
+  const titleEl = doc.querySelector('book-title');
+  const title = titleEl ? titleEl.textContent.trim() : file.name.replace(/\.fb2$/i, '');
+  const bodies = [...doc.querySelectorAll('body')].filter(b => b.getAttribute('name') !== 'notes');
+  const parts = [];
+  for (const body of bodies) {
+    for (const el of body.querySelectorAll('p, subtitle, v')) {
+      const txt = el.textContent.replace(/\s+/g, ' ').trim();
+      if (txt) parts.push(txt);
+    }
+  }
+  return { title, text: parts.join('\n\n') };
+}
+
+/* ============ Состояние ============ */
+const $ = id => document.getElementById(id);
+const state = {
+  tokens: [], starts: [], idx: 0, title: '',
+  wpm: 300, playing: false, timer: null, rampLeft: 0,
+  sessionWords: 0, sessionMs: 0, lastTick: 0,
+  flushedW: 0, flushedMs: 0,
+  maxIdx: 0,                      // фронтир: слова считаются один раз
+  nonSepRatio: 1,
+  regs: {},                       // карта регрессий: стартИндекс -> число возвратов
+  cleanMs: 0,                     // чистое время без перемоток (для тренера)
+  finished: false,
+};
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(name).classList.add('active');
+}
+
+/* ============ Тосты ============ */
+let toastTimer = null;
+function toast(html) {
+  const el = $('toast');
+  el.innerHTML = html;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+/* ============ Рендер ============ */
+function displayWord(t) {
+  if (t.dlgStart && settings.dlg === 'indicator') return t.w.replace(/^—\s?/, '');
+  return t.w;
+}
+
+function renderWord() {
+  const t = state.tokens[state.idx];
+  if (!t) return;
+  const row = $('wordRow');
+  row.style.opacity = 1;
+  row.style.fontSize = '';
+  const w = t.sep ? '' : displayWord(t); // граница абзаца — пустой кадр-«вдох»
+  const chars = [...w]; // безопасно для суррогатных пар
+  const font = rowFont(row);
+  const ci = orpCharIndex(chars, font);
+  const pre = chars.slice(0, ci).join('');
+  const orp = chars[ci] || '';
+  const post = chars.slice(ci + 1).join('');
+  row.children[0].textContent = pre;
+  row.children[1].textContent = orp;
+  row.children[2].textContent = post;
+
+  // автоужатие: якорь в центре, значит лимит — больший из двух «полукрыльев»
+  const ret = row.parentElement;
+  meas.font = font;
+  const wOrp = meas.measureText(orp).width;
+  const half = Math.max(meas.measureText(pre).width, meas.measureText(post).width) + wOrp / 2;
+  if (half * 2 > ret.clientWidth) {
+    const cur = parseFloat(getComputedStyle(row).fontSize);
+    row.style.fontSize = Math.floor(cur * ret.clientWidth / (half * 2) * 0.96) + 'px';
+  }
+
+  $('dlgMark').style.visibility = (t.dlg && !t.sep && settings.dlg !== 'merge') ? 'visible' : 'hidden';
+
+  const pct = Math.round((state.idx / state.tokens.length) * 100);
+  $('progressPct').textContent = pct + '%';
+  $('progressBar').style.width = pct + '%';
+  updateTimeLeft();
+}
+
+function updateTimeLeft() {
+  const leftWords = Math.max(0, Math.round((state.tokens.length - state.idx) * state.nonSepRatio));
+  // если уже есть фактическая скорость — оцениваем по ней, иначе по заданной с поправкой на умный темп
+  const min = state.sessionMs / 60000;
+  const eff = (min > 0.3 && state.sessionWords > 30) ? state.sessionWords / min : state.wpm * 0.72;
+  const leftMin = Math.ceil(leftWords / eff);
+  $('statLeft').textContent = leftMin >= 60 ? Math.floor(leftMin / 60) + ' ч ' + (leftMin % 60) + ' мин' : '~' + leftMin + ' мин';
+}
+
+function sentenceRange(idx) {
+  let s = 0;
+  for (const st of state.starts) { if (st <= idx) s = st; else break; }
+  let e = state.tokens.length;
+  for (const st of state.starts) { if (st > idx) { e = st; break; } }
+  return [s, e];
+}
+
+function renderContext() {
+  const ctx = $('context');
+  if (state.playing) { ctx.style.display = 'none'; $('pausedLabel').style.display = 'none'; return; }
+  const [s, e] = sentenceRange(state.idx);
+  let prevHtml = '';
+  const pi = state.starts.indexOf(s);
+  if (pi > 0) {
+    const ps = state.starts[pi - 1];
+    prevHtml = '<span class="prev">' + state.tokens.slice(ps, s).filter(t => !t.sep).map(t => escapeHtml(t.w)).join(' ') + '</span>';
+  }
+  const parts = [];
+  for (let gi = s; gi < e; gi++) {
+    const t = state.tokens[gi];
+    if (t.sep) continue;
+    parts.push(gi === state.idx ? `<span class="cur">${escapeHtml(t.w)}</span>` : escapeHtml(t.w));
+  }
+  ctx.innerHTML = prevHtml + parts.join(' ');
+  ctx.style.display = 'block';
+  $('pausedLabel').style.display = 'block';
+}
+function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function updateStats() {
+  $('statWords').textContent = state.sessionWords;
+  const sec = Math.round(state.sessionMs / 1000);
+  $('statTime').textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+  const min = state.sessionMs / 60000;
+  $('wpmReal').textContent = min > 0.05 ? Math.round(state.sessionWords / min) : '—';
+  $('wpmVal').textContent = state.wpm;
+}
+
+/* ============ Движок ============ */
+function tick() {
+  if (!state.playing) return;
+  const now = performance.now();
+  const dt = now - state.lastTick;
+  state.sessionMs += dt;
+  state.lastTick = now;
+
+  state.idx++;
+  if (state.idx >= state.tokens.length) { state.idx = state.tokens.length - 1; finish(); return; }
+  const t = state.tokens[state.idx];
+
+  // честная статистика: слово засчитывается только при первом прохождении
+  if (!t.sep && state.idx > state.maxIdx) { state.sessionWords++; state.maxIdx = state.idx; }
+
+  // тренер: чистое время растёт только на новых словах
+  if (settings.trainer) {
+    state.cleanMs += dt;
+    if (state.cleanMs >= 60000) {
+      state.cleanMs = 0;
+      if (state.wpm < 900) {
+        state.wpm = Math.min(900, state.wpm + 10);
+        localStorage.setItem('fr_wpm', state.wpm);
+        toast('<span class="up">▲ +10</span> · ' + state.wpm + ' сл/мин');
+      }
+    }
+  }
+
+  if (t.sep && !settings.sep) { return tick(); }
+  renderWord();
+  updateStats();
+  if (state.sessionWords % 30 === 0) { saveProgress(); flushDay(); }
+
+  let delay = wordDelay(t, 60000 / state.wpm);
+  if (state.rampLeft > 0) { delay *= 1 + state.rampLeft * 0.35; state.rampLeft--; }
+
+  // режим смены слов: пустой зазор перед следующим словом снижает
+  // взаимную маскировку слов в зрительной системе (ISI в RSVP-исследованиях)
+  if (settings.trans !== 'cut' && !t.sep && delay > 120) {
+    const gap = Math.min(60, delay * 0.15);
+    state.blankTimer = setTimeout(() => { $('wordRow').style.opacity = 0; }, delay - gap);
+  }
+  state.timer = setTimeout(tick, delay);
+}
+
+function play() {
+  if (state.playing || !state.tokens.length || state.finished) return;
+  state.playing = true;
+  state.rampLeft = 4;
+  $('playBtn').textContent = '⏸';
+  $('reader').classList.add('focus');
+  renderContext();
+  // обратный отсчёт-вдох перед стартом
+  const cd = $('countdown');
+  cd.style.display = 'block';
+  setTimeout(() => { cd.style.display = 'none'; }, 600);
+  state.lastTick = performance.now() + 700;
+  state.timer = setTimeout(tick, 700);
+}
+
+function pause() {
+  state.playing = false;
+  clearTimeout(state.timer);
+  clearTimeout(state.blankTimer);
+  $('wordRow').style.opacity = 1;
+  $('playBtn').textContent = '▶';
+  $('reader').classList.remove('focus');
+  if (state.tokens[state.idx] && state.tokens[state.idx].sep) {
+    let i = state.idx;
+    while (i > 0 && state.tokens[i].sep) i--;
+    if (state.tokens[i].sep) { i = state.idx; while (i < state.tokens.length - 1 && state.tokens[i].sep) i++; }
+    state.idx = i;
+    renderWord();
+  }
+  renderContext(); updateStats(); saveProgress(); flushDay();
+}
+
+function finish() {
+  pause();
+  state.finished = true;
+  $('finW').textContent = state.sessionWords;
+  const sec = Math.round(state.sessionMs / 1000);
+  $('finT').textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+  const min = state.sessionMs / 60000;
+  $('finS').textContent = min > 0.05 ? Math.round(state.sessionWords / min) : '—';
+  const regCount = Object.keys(state.regs).length;
+  if (regCount > 0) {
+    $('finishReg').style.display = 'block';
+    $('finishReg').innerHTML = `Ты возвращался к <b>${regCount}</b> ${plural(regCount, 'месту', 'местам', 'местам')} — возможно, там было сложно.`;
+    $('finRegBtn').style.display = 'block';
+  } else {
+    $('finishReg').style.display = 'none';
+    $('finRegBtn').style.display = 'none';
+  }
+  $('finish').classList.add('open');
+}
+function plural(n, one, few, many) { const m = n % 10, h = n % 100; return (m === 1 && h !== 11) ? one : (m >= 2 && m <= 4 && (h < 12 || h > 14)) ? few : many; }
+
+function goTo(idx, snap = true) {
+  const wasPlaying = state.playing;
+  pause();
+  state.finished = false;
+  idx = Math.max(0, Math.min(idx, state.tokens.length - 1));
+  if (snap) { const [s] = sentenceRange(idx); idx = s; }
+  // регрессия = осознанный возврат назад: запоминаем место
+  if (idx < state.idx - 2) recordRegression(idx);
+  state.idx = idx;
+  renderWord(); renderContext();
+  if (wasPlaying) play();
+}
+
+function recordRegression(targetIdx) {
+  const [s] = sentenceRange(targetIdx);
+  state.regs[s] = (state.regs[s] || 0) + 1;
+  try { localStorage.setItem('fr_reg_' + docKey(), JSON.stringify(state.regs)); } catch (e) {}
+  if (settings.trainer) {
+    state.cleanMs = 0;
+    if (state.wpm > 100) {
+      state.wpm = Math.max(100, state.wpm - 10);
+      localStorage.setItem('fr_wpm', state.wpm);
+      toast('<span class="down">▼ −10</span> · ' + state.wpm + ' сл/мин');
+    }
+  }
+}
+
+function jumpSentence(dir) {
+  const starts = state.starts;
+  let cur = 0;
+  for (let i = 0; i < starts.length; i++) if (starts[i] <= state.idx) cur = i; else break;
+  if (dir < 0) goTo((state.idx === starts[cur] && cur > 0) ? starts[cur - 1] : starts[cur], false);
+  else if (cur + 1 < starts.length) goTo(starts[cur + 1], false);
+}
+
+function changeWpm(d) {
+  state.wpm = Math.min(900, Math.max(100, state.wpm + d));
+  updateStats(); updateTimeLeft();
+  localStorage.setItem('fr_wpm', state.wpm);
+}
+
+/* ============ Сложные места ============ */
+function showRegList() {
+  const entries = Object.entries(state.regs).map(([s, n]) => [+s, n]).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  $('regList').innerHTML = entries.map(([s, n]) => {
+    const [a, e] = sentenceRange(s);
+    const txt = state.tokens.slice(a, e).filter(t => !t.sep).map(t => t.w).join(' ');
+    return `<div class="item"><div class="n">${n} ${plural(n, 'возврат', 'возврата', 'возвратов')}</div>${escapeHtml(txt)}</div>`;
+  }).join('');
+  $('regModal').classList.add('open');
+}
+
+/* ============ Статистика по дням ============ */
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+function flushDay() {
+  const dw = state.sessionWords - state.flushedW;
+  const dm = state.sessionMs - state.flushedMs;
+  if (dw <= 0 && dm <= 0) return;
+  const days = JSON.parse(localStorage.getItem('fr_days') || '{}');
+  const k = todayKey();
+  days[k] = days[k] || { w: 0, ms: 0 };
+  days[k].w += Math.max(0, dw); days[k].ms += Math.max(0, dm);
+  localStorage.setItem('fr_days', JSON.stringify(days));
+  state.flushedW = state.sessionWords; state.flushedMs = state.sessionMs;
+}
+function renderDays() {
+  const days = JSON.parse(localStorage.getItem('fr_days') || '{}');
+  const keys = [];
+  for (let d = 6; d >= 0; d--) {
+    const dt = new Date(); dt.setDate(dt.getDate() - d);
+    keys.push(dt.toISOString().slice(0, 10));
+  }
+  const vals = keys.map(k => days[k] ? days[k].w : 0);
+  if (vals.every(v => v === 0)) return;
+  $('daysCard').style.display = 'block';
+  const t = days[todayKey()] || { w: 0, ms: 0 };
+  const min = Math.round(t.ms / 60000);
+  const eff = t.ms > 3000 ? Math.round(t.w / (t.ms / 60000)) : 0;
+  $('todayLine').innerHTML = `Сегодня: <b>${t.w}</b> слов · ${min} мин` + (eff ? ` · факт ${eff} сл/мин` : '');
+  const max = Math.max(...vals, 1);
+  const names = ['вс','пн','вт','ср','чт','пт','сб'];
+  $('daysBars').innerHTML = keys.map((k, i) => {
+    const h = Math.round(vals[i] / max * 44);
+    const day = names[new Date(k + 'T12:00').getDay()];
+    return `<div class="col${i === 6 ? ' cur' : ''}"><div class="bar" style="height:${h}px"></div><div class="lbl">${day}</div></div>`;
+  }).join('');
+}
+
+/* ============ Сохранение ============ */
+function docKey() { return state.title + '_' + state.tokens.length; }
+function saveProgress() {
+  if (!state.tokens.length) return;
+  try {
+    localStorage.setItem('fr_pos_' + docKey(), state.idx);
+    localStorage.setItem('fr_last', JSON.stringify({ title: state.title, total: state.tokens.length, idx: state.idx }));
+  } catch (e) {}
+}
+
+/* ============ Открытие документа ============ */
+function openDoc(title, text, resumeIdx) {
+  const tokens = tokenize(text);
+  if (!tokens.length) { alert('Текст пуст'); return; }
+  state.tokens = tokens;
+  state.starts = sentenceStarts(tokens);
+  state.title = title;
+  state.idx = Math.min(resumeIdx || 0, tokens.length - 1);
+  while (state.idx > 0 && tokens[state.idx].sep) state.idx--;
+  state.maxIdx = state.idx;
+  state.sessionWords = 0; state.sessionMs = 0; state.flushedW = 0; state.flushedMs = 0;
+  state.cleanMs = 0; state.finished = false;
+  state.nonSepRatio = tokens.filter(t => !t.sep).length / tokens.length;
+  state.regs = JSON.parse(localStorage.getItem('fr_reg_' + docKey()) || '{}');
+  $('docTitle').textContent = title;
+  showScreen('reader');
+  if (!history.state || !history.state.reader) history.pushState({ reader: 1 }, '');
+  renderWord(); renderContext(); updateStats();
+  // текст пишем в IndexedDB один раз — не дёргаем localStorage на каждом сохранении
+  idbSet('last', { title, text }).catch(() => {});
+  saveProgress();
+}
+
+/* ============ События ============ */
+$('readPasted').onclick = () => {
+  const text = $('pasteArea').value.trim();
+  if (!text) { alert('Вставь текст'); return; }
+  const probe = tokenize(text).length;
+  openDoc('Вставленный текст', text, +(localStorage.getItem('fr_pos_Вставленный текст_' + probe) || 0));
+};
+$('fileBtn').onclick = () => $('fileInput').click();
+$('fileInput').onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    let title, text;
+    if (/\.fb2$|\.xml$/i.test(file.name)) ({ title, text } = await parseFb2(file));
+    else { text = await file.text(); title = file.name.replace(/\.txt$/i, ''); }
+    const probe = tokenize(text).length;
+    openDoc(title, text, +(localStorage.getItem('fr_pos_' + title + '_' + probe) || 0));
+  } catch (err) { alert('Ошибка: ' + err.message); }
+  e.target.value = '';
+};
+
+function goHome() { pause(); $('finish').classList.remove('open'); showScreen('home'); initResume(); renderDays(); }
+$('backBtn').onclick = () => { if (history.state && history.state.reader) history.back(); else goHome(); };
+window.addEventListener('popstate', () => { if ($('reader').classList.contains('active')) goHome(); });
+
+$('restartBtn').onclick = () => goTo(0, false);
+$('playBtn').onclick = () => state.playing ? pause() : play();
+$('slower').onclick = () => changeWpm(-25);
+$('faster').onclick = () => changeWpm(25);
+$('prevSent').onclick = () => jumpSentence(-1);
+$('nextSent').onclick = () => jumpSentence(1);
+$('stage').onclick = () => state.playing ? pause() : play();
+
+$('progressWrap').onclick = e => {
+  const r = $('progressTrack').getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  goTo(Math.round(pct * (state.tokens.length - 1)));
+};
+
+document.addEventListener('keydown', e => {
+  if (document.querySelector('.overlay.open')) return;
+  if (!$('reader').classList.contains('active')) return;
+  if (e.code === 'Space') { e.preventDefault(); state.playing ? pause() : play(); }
+  else if (e.code === 'ArrowLeft') jumpSentence(-1);
+  else if (e.code === 'ArrowRight') jumpSentence(1);
+  else if (e.code === 'ArrowUp') { e.preventDefault(); changeWpm(25); }
+  else if (e.code === 'ArrowDown') { e.preventDefault(); changeWpm(-25); }
+  else if (e.code === 'Home') goTo(0, false);
+});
+
+// не теряем прогресс при закрытии вкладки / сворачивании
+window.addEventListener('beforeunload', () => { saveProgress(); flushDay(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (state.playing) pause(); saveProgress(); flushDay(); }
+});
+
+/* ============ Настройки: события ============ */
+$('setBtn').onclick = () => { pause(); syncPanel(); $('settings').classList.add('open'); };
+$('setClose').onclick = () => $('settings').classList.remove('open');
+$('settings').onclick = e => { if (e.target === $('settings')) $('settings').classList.remove('open'); };
+function syncPanel() {
+  $('sizeRange').value = settings.size;
+  $('fontSel').value = settings.font;
+  $('dlgSel').value = settings.dlg;
+  $('sepChk').checked = settings.sep;
+  $('smartChk').checked = settings.smart;
+  $('trainerChk').checked = settings.trainer;
+  $('transSel').value = settings.trans;
+  $('orpSel').value = settings.orp;
+}
+$('transSel').onchange = e => { settings.trans = e.target.value; applySettings(); };
+$('orpSel').onchange = e => { settings.orp = e.target.value; applySettings(); renderWord(); };
+$('sizeRange').oninput = e => { settings.size = +e.target.value; applySettings(); renderWord(); };
+$('fontSel').onchange = e => { settings.font = e.target.value; applySettings(); renderWord(); };
+$('dlgSel').onchange = e => { settings.dlg = e.target.value; applySettings(); renderWord(); };
+$('sepChk').onchange = e => { settings.sep = e.target.checked; applySettings(); };
+$('smartChk').onchange = e => { settings.smart = e.target.checked; applySettings(); };
+$('trainerChk').onchange = e => { settings.trainer = e.target.checked; applySettings(); };
+
+/* ============ Финиш: события ============ */
+$('finHome').onclick = goHome;
+$('finRestart').onclick = () => { $('finish').classList.remove('open'); goTo(0, false); };
+$('finRegBtn').onclick = () => { $('finish').classList.remove('open'); showRegList(); };
+$('regClose').onclick = () => $('regModal').classList.remove('open');
+$('regModal').onclick = e => { if (e.target === $('regModal')) $('regModal').classList.remove('open'); };
+
+/* ============ Резюме ============ */
+async function initResume() {
+  const last = localStorage.getItem('fr_last');
+  if (!last) return;
+  const info = JSON.parse(last);
+  let saved = null;
+  try { saved = await idbGet('last'); } catch (e) {}
+  if (!saved) { saved = { title: info.title, text: localStorage.getItem('fr_last_text') }; }
+  if (!saved || !saved.text) return;
+  const card = $('resumeCard');
+  card.style.display = 'block';
+  $('resumeTitle').textContent = '▶ Продолжить: ' + saved.title;
+  $('resumeInfo').textContent = Math.round(info.idx / info.total * 100) + '% · ' + info.total + ' слов';
+  card.onclick = () => openDoc(saved.title, saved.text, info.idx);
+}
+
+/* ============ Примеры (тест-набор книг) ============ */
+async function initSamples() {
+  try {
+    const res = await fetch('sample-books/manifest.json', { cache: 'no-cache' });
+    if (!res.ok) return;
+    const list = await res.json();
+    if (!Array.isArray(list) || !list.length) return;
+    const wrap = $('samplesBtns');
+    list.forEach(item => {
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = item.title || item.file;
+      if (item.note) b.title = item.note;
+      b.onclick = async () => {
+        try {
+          const r = await fetch('sample-books/' + item.file, { cache: 'no-cache' });
+          if (!r.ok) throw new Error('не удалось загрузить пример');
+          const text = await r.text();
+          const title = item.title || item.file.replace(/\.txt$/i, '');
+          const probe = tokenize(text).length;
+          openDoc(title, text, +(localStorage.getItem('fr_pos_' + title + '_' + probe) || 0));
+        } catch (err) { alert('Ошибка: ' + err.message); }
+      };
+      wrap.appendChild(b);
+    });
+    $('samplesRow').style.display = 'flex';
+  } catch (e) { /* открыт как file:// или примеров нет — просто прячем блок */ }
+}
+
+state.wpm = +(localStorage.getItem('fr_wpm') || 300);
+applySettings();
+updateStats();
+initResume();
+renderDays();
+initSamples();
+</script>
+</body>
+</html>
