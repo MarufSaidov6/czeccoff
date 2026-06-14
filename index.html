@@ -313,6 +313,18 @@
       <div><div class="l">Умный темп</div><div class="d">Паузы на пунктуации, числах, длинных словах</div></div>
       <label class="switch"><input type="checkbox" id="smartChk"><span class="tr"></span></label>
     </div>
+    <div class="set">
+      <div><div class="l">Центральная ось</div><div class="d">Вертикальная линия и засечки вокруг якоря</div></div>
+      <label class="switch"><input type="checkbox" id="axisChk"><span class="tr"></span></label>
+    </div>
+    <div class="set">
+      <div><div class="l">Мини-панель при чтении</div><div class="d">Скорость и прогресс не гаснут в фокус-режиме</div></div>
+      <label class="switch"><input type="checkbox" id="hudChk"><span class="tr"></span></label>
+    </div>
+    <div class="set">
+      <div><div class="l">Приглушать знаки</div><div class="d">Кавычки и краевая пунктуация тусклее букв</div></div>
+      <label class="switch"><input type="checkbox" id="dimPunctChk"><span class="tr"></span></label>
+    </div>
     <button class="btn primary close" id="setClose">Готово</button>
   </div>
 </div>
@@ -348,7 +360,7 @@
 'use strict';
 
 /* ============ Настройки ============ */
-const defaults = { size: 100, font: 'sans', dlg: 'merge', sep: true, smart: true, trainer: false, trans: 'cut', orp: 'classic' };
+const defaults = { size: 100, font: 'sans', dlg: 'merge', sep: true, smart: true, trainer: false, trans: 'cut', orp: 'classic', axis: true, hud: true, dimPunct: true };
 let settings = { ...defaults, ...JSON.parse(localStorage.getItem('fr_set') || '{}') };
 function applySettings() {
   document.body.dataset.trans = settings.trans;
@@ -356,6 +368,8 @@ function applySettings() {
   document.documentElement.style.setProperty('--wfont',
     settings.font === 'serif' ? 'Georgia, "Times New Roman", serif'
     : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
+  $('reader').classList.toggle('axis', settings.axis);
+  $('reader').classList.toggle('hud', settings.hud);
   localStorage.setItem('fr_set', JSON.stringify(settings));
 }
 
@@ -997,6 +1011,9 @@ function syncPanel() {
   $('trainerChk').checked = settings.trainer;
   $('transSel').value = settings.trans;
   $('orpSel').value = settings.orp;
+  $('axisChk').checked = settings.axis;
+  $('hudChk').checked = settings.hud;
+  $('dimPunctChk').checked = settings.dimPunct;
 }
 $('transSel').onchange = e => { settings.trans = e.target.value; applySettings(); };
 $('orpSel').onchange = e => { settings.orp = e.target.value; applySettings(); renderWord(); };
@@ -1006,6 +1023,9 @@ $('dlgSel').onchange = e => { settings.dlg = e.target.value; applySettings(); re
 $('sepChk').onchange = e => { settings.sep = e.target.checked; applySettings(); };
 $('smartChk').onchange = e => { settings.smart = e.target.checked; applySettings(); };
 $('trainerChk').onchange = e => { settings.trainer = e.target.checked; applySettings(); };
+$('axisChk').onchange = e => { settings.axis = e.target.checked; applySettings(); };
+$('hudChk').onchange = e => { settings.hud = e.target.checked; applySettings(); };
+$('dimPunctChk').onchange = e => { settings.dimPunct = e.target.checked; applySettings(); renderWord(); };
 
 /* ============ Финиш: события ============ */
 $('finHome').onclick = goHome;
