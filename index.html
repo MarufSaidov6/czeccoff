@@ -15,7 +15,6 @@
     --accent-dim: #b8453d;
     --guide: #3a3a44;
     --punct: #5d5b66;
-    --guide-strong: #8a8a98;
     --wsize: 1;
     --wfont: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
@@ -88,21 +87,23 @@
   #reader.focus.hud .controls { opacity: 0; pointer-events: none; }
   #reader.focus.hud .topbar button,
   #reader.focus.hud .topbar .title { opacity: 0; pointer-events: none; }
-  #topWpm { display: none; color: var(--muted); white-space: nowrap; }
-  #reader.focus.hud #topWpm { display: block; }
   #reader.focus.hud #progressTrack { height: 6px; background: var(--guide); }
   #reader.focus.hud #progressBar { background: var(--accent); }
   #reader.focus.hud #progressPct { color: var(--text); font-weight: 600; }
 
   .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; cursor: pointer; overflow: hidden; }
-  .reticle { width: min(86vw, 600px); }
-  .reticle { position: relative; }
-  .reticle .word-row { position: relative; z-index: 1; }
-  .axis-line { position: absolute; left: 50%; top: 0; bottom: 0; transform: translateX(-50%); width: 1px; background: rgba(255,255,255,.10); z-index: 0; display: none; }
-  #reader.axis .axis-line { display: block; }
-  #reader.axis .guide-line .tick { background: var(--guide-strong); }
+  .reticle { width: min(86vw, 600px); position: relative; }
   .guide-line { display: flex; justify-content: center; }
   .guide-line .tick { width: 2px; height: 14px; background: var(--guide); }
+  /* мини-панель показателей в нижнем поле зрения — у самого слова, а не в шапке,
+     чтобы взгляд не уходил с якоря; статична и тускла, поэтому не отвлекает */
+  #hudReadout {
+    position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    white-space: nowrap; color: var(--muted); font-size: 13px; letter-spacing: .02em;
+    display: none; pointer-events: none;
+  }
+  #hudReadout b { color: var(--text); font-weight: 700; font-size: 16px; }
+  #reader.focus.hud #hudReadout { display: block; }
   .word-row {
     /* minmax(0,1fr): колонки всегда равны, длинный хвост слова переполняется
        наружу, но якорь остаётся строго в центре под метками */
@@ -241,7 +242,6 @@
     <button id="restartBtn" title="В начало">⟲</button>
     <div class="title" id="docTitle"></div>
     <div id="progressPct">0%</div>
-    <div id="topWpm">0 сл/мин</div>
     <button id="setBtn" title="Настройки">⚙</button>
   </div>
   <div id="progressWrap"><div id="progressTrack"><div id="progressBar"></div></div></div>
@@ -250,13 +250,13 @@
     <div id="pausedLabel">Пауза — пробел или тап</div>
     <div id="countdown">• • •</div>
     <div class="reticle">
-      <div class="axis-line"></div>
       <div class="guide-line"><div class="tick"></div></div>
       <div class="word-row" id="wordRow">
         <span class="pre"></span><span class="orp"></span><span class="post"></span>
       </div>
       <div class="guide-line"><div class="tick"></div></div>
       <div id="dlgMark">— реплика</div>
+      <div id="hudReadout"></div>
     </div>
     <div id="context"></div>
   </div>
@@ -336,11 +336,7 @@
       <label class="switch"><input type="checkbox" id="smartChk"><span class="tr"></span></label>
     </div>
     <div class="set">
-      <div><div class="l">Центральная ось</div><div class="d">Вертикальная линия и засечки вокруг якоря</div></div>
-      <label class="switch"><input type="checkbox" id="axisChk"><span class="tr"></span></label>
-    </div>
-    <div class="set">
-      <div><div class="l">Мини-панель при чтении</div><div class="d">Скорость и прогресс не гаснут в фокус-режиме</div></div>
+      <div><div class="l">Мини-панель при чтении</div><div class="d">Скорость, позиция и прогресс не гаснут в фокус-режиме</div></div>
       <label class="switch"><input type="checkbox" id="hudChk"><span class="tr"></span></label>
     </div>
     <div class="set">
@@ -382,7 +378,7 @@
 'use strict';
 
 /* ============ Настройки ============ */
-const defaults = { size: 100, font: 'sans', dlg: 'merge', sep: true, smart: true, trainer: false, trans: 'cut', orp: 'classic', axis: true, hud: true, dimPunct: true };
+const defaults = { size: 100, font: 'sans', dlg: 'merge', sep: true, smart: true, trainer: false, trans: 'cut', orp: 'classic', hud: true, dimPunct: true };
 let settings = { ...defaults, ...JSON.parse(localStorage.getItem('fr_set') || '{}') };
 function applySettings() {
   document.body.dataset.trans = settings.trans;
@@ -390,7 +386,6 @@ function applySettings() {
   document.documentElement.style.setProperty('--wfont',
     settings.font === 'serif' ? 'Georgia, "Times New Roman", serif'
     : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
-  $('reader').classList.toggle('axis', settings.axis);
   $('reader').classList.toggle('hud', settings.hud);
   localStorage.setItem('fr_set', JSON.stringify(settings));
 }
@@ -719,7 +714,8 @@ function updateTimeLeft() {
 function updateReadout() {
   const total = state.totalWords || state.tokens.length;
   const cur = Math.min(total, Math.max(1, Math.round(state.idx * state.nonSepRatio)));
-  $('topWpm').textContent = 'слово ' + cur + '/' + total + ' · ' + $('statLeft').textContent + ' · ' + state.wpm + ' сл/мин';
+  // скорость — первой и крупнее: это то, что хочется видеть на лету
+  $('hudReadout').innerHTML = '<b>' + state.wpm + '</b> сл/мин · слово ' + cur + ' / ' + total + ' · ' + $('statLeft').textContent;
 }
 
 function sentenceRange(idx) {
@@ -1050,7 +1046,6 @@ function syncPanel() {
   $('trainerChk').checked = settings.trainer;
   $('transSel').value = settings.trans;
   $('orpSel').value = settings.orp;
-  $('axisChk').checked = settings.axis;
   $('hudChk').checked = settings.hud;
   $('dimPunctChk').checked = settings.dimPunct;
 }
@@ -1062,7 +1057,6 @@ $('dlgSel').onchange = e => { settings.dlg = e.target.value; applySettings(); re
 $('sepChk').onchange = e => { settings.sep = e.target.checked; applySettings(); };
 $('smartChk').onchange = e => { settings.smart = e.target.checked; applySettings(); };
 $('trainerChk').onchange = e => { settings.trainer = e.target.checked; applySettings(); };
-$('axisChk').onchange = e => { settings.axis = e.target.checked; applySettings(); };
 $('hudChk').onchange = e => { settings.hud = e.target.checked; applySettings(); };
 $('dimPunctChk').onchange = e => { settings.dimPunct = e.target.checked; applySettings(); renderWord(); };
 
