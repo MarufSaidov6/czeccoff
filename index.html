@@ -14,6 +14,7 @@
     --accent: #ff5a4e;
     --accent-dim: #b8453d;
     --guide: #3a3a44;
+    --punct: #5d5b66;
     --wsize: 1;
     --wfont: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
@@ -95,6 +96,7 @@
   .word-row .pre { text-align: right; white-space: pre; }
   .word-row .orp { color: var(--accent); text-align: center; white-space: pre; }
   .word-row .post { text-align: left; white-space: pre; }
+  .word-row .pn { color: var(--punct); }
   body[data-trans="fade"] .word-row { transition: opacity .07s linear; }
 
   #dlgMark { text-align: center; height: 20px; font-size: 14px; color: var(--accent-dim); letter-spacing: .1em; visibility: hidden; margin-top: 2px; }
@@ -650,18 +652,27 @@ function renderWord() {
   const chars = [...w]; // безопасно для суррогатных пар
   const font = rowFont(row);
   const ci = orpCharIndex(chars, font);
-  const pre = chars.slice(0, ci).join('');
+  const preStr = chars.slice(0, ci).join('');
   const orp = chars[ci] || '';
-  const post = chars.slice(ci + 1).join('');
-  row.children[0].textContent = pre;
-  row.children[1].textContent = orp;
-  row.children[2].textContent = post;
+  const postStr = chars.slice(ci + 1).join('');
+  if (settings.dimPunct && w) {
+    const ep = edgePunct(w);
+    const preCore = preStr.startsWith(ep.lead) ? preStr.slice(ep.lead.length) : preStr;
+    const postCore = (ep.trail && postStr.endsWith(ep.trail)) ? postStr.slice(0, postStr.length - ep.trail.length) : postStr;
+    row.children[0].innerHTML = (ep.lead ? '<span class="pn">' + escapeHtml(ep.lead) + '</span>' : '') + escapeHtml(preCore);
+    row.children[1].textContent = orp;
+    row.children[2].innerHTML = escapeHtml(postCore) + (ep.trail ? '<span class="pn">' + escapeHtml(ep.trail) + '</span>' : '');
+  } else {
+    row.children[0].textContent = preStr;
+    row.children[1].textContent = orp;
+    row.children[2].textContent = postStr;
+  }
 
   // автоужатие: якорь в центре, значит лимит — больший из двух «полукрыльев»
   const ret = row.parentElement;
   meas.font = font;
   const wOrp = meas.measureText(orp).width;
-  const half = Math.max(meas.measureText(pre).width, meas.measureText(post).width) + wOrp / 2;
+  const half = Math.max(meas.measureText(preStr).width, meas.measureText(postStr).width) + wOrp / 2;
   if (half * 2 > ret.clientWidth) {
     const cur = parseFloat(getComputedStyle(row).fontSize);
     row.style.fontSize = Math.floor(cur * ret.clientWidth / (half * 2) * 0.96) + 'px';
