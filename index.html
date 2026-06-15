@@ -219,6 +219,20 @@
   .tp-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 4px 0 12px; border-bottom: 1px solid var(--surface-2); }
   .tp-lbl { font-size: 12px; color: var(--muted); }
   .tp-word { font-size: 22px; font-weight: 600; min-width: 100px; text-align: center; color: var(--text); }
+  /* ===== Онбординг (воронка первого запуска) ===== */
+  .ob-panel { width: min(92vw, 420px); text-align: center; position: relative; }
+  .ob-panel h2 { font-size: 22px; margin-bottom: 8px; }
+  .ob-sub { color: var(--muted); font-size: 14px; margin: 8px 0 18px; line-height: 1.5; }
+  .ob-skip { position: absolute; top: -8px; right: -4px; background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; }
+  .ob-skip:hover { color: var(--text); }
+  .ob-flash { height: 84px; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 600; }
+  .ob-flash .ob-orp { color: var(--accent); }
+  .ob-rev { font-size: 16px; line-height: 1.6; }
+  .ob-rev b { color: var(--accent); }
+  .ob-goals { display: flex; gap: 8px; justify-content: center; margin: 14px 0 18px; }
+  .ob-goals button { flex: 1; background: var(--surface-2); border: 1px solid var(--guide); color: var(--text); border-radius: 10px; padding: 12px 0; font-size: 14px; cursor: pointer; }
+  .ob-goals button:hover, .ob-goals button.sel { border-color: var(--accent); }
+  .ob-panel .btn { width: 100%; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -346,6 +360,14 @@
     <h2>Проверка понимания</h2>
     <div id="quizBody"></div>
     <button class="btn primary close" id="quizSubmit">Ответить</button>
+  </div>
+</div>
+
+<!-- ===================== ОНБОРДИНГ ===================== -->
+<div id="onboard" class="overlay">
+  <div class="panel ob-panel">
+    <button class="ob-skip" id="obSkip">Пропустить</button>
+    <div id="obBody"></div>
   </div>
 </div>
 
@@ -1364,12 +1386,61 @@ $('lbBack').onclick = goHome;
 $('czkBoardBtn').onclick = openLeaderboard;
 czkLoad();
 
+/* ============ Онбординг: воронка первого запуска ============ */
+// Завлечение по ресёрчу: wow-демо (прогресс за ~20с) → коммит к цели → в турнир.
+// Без персонажа и давления, пропускаемо, один раз на устройство.
+const OB_DEMO = ['Ты', 'читаешь', 'быстрее,', 'чем', 'думаешь', '—', 'слова', 'не', 'убегают,', 'глаза', 'стоят', 'на', 'месте.'];
+let obTimer = null;
+function obWord(w) { const c = [...w]; return '<span class="ob-orp">' + escapeHtml(c[0] || '') + '</span>' + escapeHtml(c.slice(1).join('')); }
+function obEnd() { clearInterval(obTimer); obTimer = null; localStorage.setItem('czk_onboarded', '1'); $('onboard').classList.remove('open'); }
+function obStep(n) {
+  clearInterval(obTimer); obTimer = null;
+  const b = $('obBody');
+  if (n === 1) {
+    b.innerHTML = '<h2>Читай заметно быстрее</h2><p class="ob-sub">Слова мелькают по одному — глаза не двигаются. Попробуй, это 20 секунд.</p><button class="btn primary" id="obGo">Поехали →</button>';
+    $('obGo').onclick = () => obStep(2);
+  } else if (n === 2) {
+    b.innerHTML = '<div class="ob-flash" id="obFlash"></div><div class="ob-rev" id="obRev"></div>';
+    const fl = $('obFlash'); let i = 0;
+    obTimer = setInterval(() => {
+      if (i >= OB_DEMO.length) {
+        clearInterval(obTimer); obTimer = null; fl.textContent = '';
+        $('obRev').innerHTML = 'Ты только что читал на <b>≈400 сл/мин</b> 🚀 — быстрее обычного.<button class="btn primary" id="obNext">Дальше →</button>';
+        $('obNext').onclick = () => obStep(3);
+        return;
+      }
+      fl.innerHTML = obWord(OB_DEMO[i]); i++;
+    }, 150);  // 150мс/слово = 400 сл/мин (честно)
+  } else {
+    b.innerHTML = '<h2>Держи серию</h2><p class="ob-sub">Сколько дней подряд читаем в Кубке?</p>'
+      + '<div class="ob-goals"><button data-g="3">3 дня</button><button data-g="7">7 дней</button><button data-g="14">14 дней</button></div>'
+      + '<p class="ob-sub">Коллеги уже соревнуются — обгони Эталон дня.</p>'
+      + '<button class="btn primary" id="obTurnir">🏆 В Турнир дня</button>'
+      + '<button class="btn" id="obRead">Просто читать</button>';
+    b.querySelectorAll('.ob-goals button').forEach(btn => btn.onclick = () => {
+      localStorage.setItem('czk_goal', btn.dataset.g);
+      b.querySelectorAll('.ob-goals button').forEach(x => x.classList.remove('sel'));
+      btn.classList.add('sel');
+    });
+    $('obTurnir').onclick = () => { obEnd(); openTournament(); };
+    $('obRead').onclick = obEnd;
+  }
+}
+function obShow() {
+  // только новичкам: ни прошлого чтения, ни пройденного онбординга
+  if (localStorage.getItem('czk_onboarded') || localStorage.getItem('fr_last')) return;
+  obStep(1);
+  $('onboard').classList.add('open');
+}
+$('obSkip').onclick = obEnd;
+
 state.wpm = +(localStorage.getItem('fr_wpm') || 300);
 applySettings();
 updateStats();
 initResume();
 renderDays();
 initSamples();
+obShow();
 </script>
 </body>
 </html>
