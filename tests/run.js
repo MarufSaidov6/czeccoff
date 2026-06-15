@@ -23,6 +23,7 @@ eval(grab(/function sentenceStarts[\s\S]*?\n}/, 'sentenceStarts'));
 eval(grab(/const meas[\s\S]*?function orpCharIndex[\s\S]*?\n  return best;\n}/, 'orp'));
 eval(grab(/function wordDelay[\s\S]*?\n}/, 'wordDelay'));
 eval(grab(/function transitionPlan[\s\S]*?\n}/, 'transitionPlan'));
+eval(grab(/function dayScore[\s\S]*?\n}/, 'dayScore'));
 eval(grab(/function plural[\s\S]*?\n}/, 'plural'));
 eval(grab(/function edgePunct[\s\S]*?\n}/, 'edgePunct'));
 
@@ -171,6 +172,13 @@ console.log('— Секция 10: смена слов (transitionPlan) —');
   p = transitionPlan(40,'gap');
   t('TRP-05','сверхкороткий кадр: gap < кадра, blankAt ≥0', p.gapMs<40 && p.blankAtMs>=0, JSON.stringify(p));
   t('TRP-06','зазор ограничен 60мс на медленных словах', transitionPlan(2000,'gap').gapMs===60);
+}
+
+console.log('— Секция 11: турнир (dayScore) —');
+{
+  t('DSC-01','2/2 верных = 10 очков', dayScore(2,2)===10);
+  t('DSC-02','1/2 верных = 4 очка', dayScore(1,2)===4);
+  t('DSC-03','0/2 верных = 0 очков', dayScore(0,2)===0);
 }
 
 console.log('\n========================================');
