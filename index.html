@@ -1284,6 +1284,14 @@ const LB_supabase = {
 };
 const LB = LB_supabase;   // общий лидерборд через Supabase
 
+// анонимный трекинг воронки: visitor-id (UUID в localStorage) → события в таблицу visits
+function vid() {
+  let v = localStorage.getItem('czk_vid');
+  if (!v) { v = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'v-' + Date.now().toString(36) + Math.random().toString(36).slice(2); localStorage.setItem('czk_vid', v); }
+  return v;
+}
+async function track(step) { try { const sb = await sbClient(); await sb.from('visits').insert({ vid: vid(), step }); } catch (e) {} }
+
 // очки гейтятся пониманием, а не сырой скоростью (2 вопроса: 2→10, 1→4, 0→0)
 function dayScore(correct, total) {
   return correct >= total ? 10 : correct > 0 ? 4 : 0;
@@ -1349,6 +1357,7 @@ function czkQuiz(day) {
     const base = dayScore(correct, qs.length);
     const me = (await LB.me()).name;
     await LB.submit({ name: me, day: todayISO(), base, effWpm: state.effWpm, comp: correct });
+    track('played');
     $('quiz').classList.remove('open');
     state.tournament = null;
     openLeaderboard();
@@ -1400,6 +1409,7 @@ function obStep(n) {
     b.innerHTML = '<h2>Читай заметно быстрее</h2><p class="ob-sub">Слова мелькают по одному — глаза не двигаются. Попробуй, это 20 секунд.</p><button class="btn primary" id="obGo">Поехали →</button>';
     $('obGo').onclick = () => obStep(2);
   } else if (n === 2) {
+    track('demo');
     b.innerHTML = '<div class="ob-flash" id="obFlash"></div><div class="ob-rev" id="obRev"></div>';
     const fl = $('obFlash'); let i = 0;
     obTimer = setInterval(() => {
@@ -1412,6 +1422,7 @@ function obStep(n) {
       fl.innerHTML = obWord(OB_DEMO[i]); i++;
     }, 150);  // 150мс/слово = 400 сл/мин (честно)
   } else {
+    track('commit');
     b.innerHTML = '<h2>Держи серию</h2><p class="ob-sub">Сколько дней подряд читаем в Кубке?</p>'
       + '<div class="ob-goals"><button data-g="3">3 дня</button><button data-g="7">7 дней</button><button data-g="14">14 дней</button></div>'
       + '<p class="ob-sub">Коллеги уже соревнуются — обгони Эталон дня.</p>'
@@ -1441,6 +1452,7 @@ initResume();
 renderDays();
 initSamples();
 obShow();
+track('open');
 </script>
 </body>
 </html>
