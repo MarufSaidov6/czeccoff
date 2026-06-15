@@ -116,7 +116,6 @@
   .word-row .orp { color: var(--accent); text-align: center; white-space: pre; }
   .word-row .post { text-align: left; white-space: pre; }
   .word-row .pn { color: var(--punct); }
-  body[data-trans="fade"] .word-row { transition: opacity .07s linear; }
 
   #dlgMark { text-align: center; height: 20px; font-size: 14px; color: var(--accent-dim); letter-spacing: .1em; visibility: hidden; margin-top: 2px; }
 
@@ -378,7 +377,7 @@
 'use strict';
 
 /* ============ Настройки ============ */
-const defaults = { size: 100, font: 'sans', dlg: 'merge', sep: true, smart: true, trainer: false, trans: 'cut', orp: 'classic', hud: true, dimPunct: true };
+const defaults = { size: 100, font: 'sans', dlg: 'merge', sep: true, smart: true, trainer: false, trans: 'gap', orp: 'classic', hud: true, dimPunct: true };
 let settings = { ...defaults, ...JSON.parse(localStorage.getItem('fr_set') || '{}') };
 function applySettings() {
   document.body.dataset.trans = settings.trans;
@@ -580,6 +579,15 @@ function wordDelay(t, baseMs) {
   return baseMs * m;
 }
 
+// План смены слова: когда гасить текущий кадр (blankAtMs) и длительность пустого
+// зазора (gapMs). cut — без зазора; gap/fade — ISI на любой скорости (зазор 25–60 мс,
+// ~20% кадра, но не больше его половины). Чистая функция — покрыта юнит-тестом.
+function transitionPlan(delayMs, mode) {
+  if (mode === 'cut') return { blankAtMs: null, gapMs: 0 };
+  const gap = Math.min(Math.max(25, Math.round(delayMs * 0.2)), 60, Math.floor(delayMs * 0.5));
+  return { blankAtMs: Math.max(0, delayMs - gap), gapMs: gap };
+}
+
 /* ============ FB2 ============ */
 async function parseFb2(file) {
   const buf = await file.arrayBuffer();
@@ -661,6 +669,7 @@ function renderWord() {
   const t = state.tokens[state.idx];
   if (!t) return;
   const row = $('wordRow');
+  row.style.transition = 'none';   // резкий онсет: новое слово сразу на полном контрасте (без fade-in)
   row.style.opacity = 1;
   row.style.fontSize = '';
   const w = t.sep ? '' : displayWord(t); // граница абзаца — пустой кадр-«вдох»
@@ -793,11 +802,15 @@ function tick() {
   let delay = wordDelay(t, 60000 / state.wpm);
   if (state.rampLeft > 0) { delay *= 1 + state.rampLeft * 0.35; state.rampLeft--; }
 
-  // режим смены слов: пустой зазор перед следующим словом снижает
-  // взаимную маскировку слов в зрительной системе (ISI в RSVP-исследованиях)
-  if (settings.trans !== 'cut' && !t.sep && delay > 120) {
-    const gap = Math.min(60, delay * 0.15);
-    state.blankTimer = setTimeout(() => { $('wordRow').style.opacity = 0; }, delay - gap);
+  // смена слов: пустой зазор (ISI) перед следующим словом снижает взаимную
+  // маскировку — на всех скоростях. fade гасит плавно, gap — резко, cut — без зазора
+  const plan = transitionPlan(delay, settings.trans);
+  if (plan.blankAtMs !== null && !t.sep) {
+    state.blankTimer = setTimeout(() => {
+      const row = $('wordRow');
+      row.style.transition = settings.trans === 'fade' ? 'opacity 70ms linear' : 'none';
+      row.style.opacity = 0;
+    }, plan.blankAtMs);
   }
   state.timer = setTimeout(tick, delay);
 }
@@ -821,6 +834,7 @@ function pause() {
   state.playing = false;
   clearTimeout(state.timer);
   clearTimeout(state.blankTimer);
+  $('wordRow').style.transition = 'none';
   $('wordRow').style.opacity = 1;
   $('playBtn').textContent = '▶';
   $('reader').classList.remove('focus');

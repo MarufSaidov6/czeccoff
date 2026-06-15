@@ -22,6 +22,7 @@ eval(grab(/const ABBR[\s\S]*?function tokenize[\s\S]*?\n  return tokens;\n}/, 't
 eval(grab(/function sentenceStarts[\s\S]*?\n}/, 'sentenceStarts'));
 eval(grab(/const meas[\s\S]*?function orpCharIndex[\s\S]*?\n  return best;\n}/, 'orp'));
 eval(grab(/function wordDelay[\s\S]*?\n}/, 'wordDelay'));
+eval(grab(/function transitionPlan[\s\S]*?\n}/, 'transitionPlan'));
 eval(grab(/function plural[\s\S]*?\n}/, 'plural'));
 eval(grab(/function edgePunct[\s\S]*?\n}/, 'edgePunct'));
 
@@ -155,6 +156,21 @@ console.log('— Секция 9: краевая пунктуация —');
   t('PNC-05','только знаки: core целиком, не падает', r.lead==='' && r.core==='...' && r.trail==='');
   r = ep('«цитата»');
   t('PNC-06','парные кавычки', r.lead==='«' && r.core==='цитата' && r.trail==='»');
+}
+
+console.log('— Секция 10: смена слов (transitionPlan) —');
+{
+  let p = transitionPlan(200,'cut');
+  t('TRP-01','cut — без зазора', p.blankAtMs===null && p.gapMs===0, JSON.stringify(p));
+  p = transitionPlan(200,'gap');
+  t('TRP-02','gap при 200мс: зазор 25..60, гашение = delay−gap', p.gapMs>=25 && p.gapMs<=60 && p.blankAtMs===200-p.gapMs, JSON.stringify(p));
+  p = transitionPlan(120,'gap');
+  t('TRP-03','высокая скорость (120мс): ISI присутствует', p.gapMs>=25 && p.blankAtMs>=0 && p.blankAtMs<120, JSON.stringify(p));
+  p = transitionPlan(100,'fade');
+  t('TRP-04','fade на 100мс: зазор есть, гашение ≥0', p.gapMs>=25 && p.blankAtMs>=0, JSON.stringify(p));
+  p = transitionPlan(40,'gap');
+  t('TRP-05','сверхкороткий кадр: gap < кадра, blankAt ≥0', p.gapMs<40 && p.blankAtMs>=0, JSON.stringify(p));
+  t('TRP-06','зазор ограничен 60мс на медленных словах', transitionPlan(2000,'gap').gapMs===60);
 }
 
 console.log('\n========================================');
