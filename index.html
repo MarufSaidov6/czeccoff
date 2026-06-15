@@ -215,6 +215,7 @@
   .lb-row .nm { flex: 1; }
   .lb-row .pt { font-weight: 600; }
   .lb-row.me { background: var(--surface-2); }
+  .lb-row.ghost { opacity: .6; font-style: italic; }
   .tp-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 4px 0 12px; border-bottom: 1px solid var(--surface-2); }
   .tp-lbl { font-size: 12px; color: var(--muted); }
   .tp-word { font-size: 22px; font-weight: 600; min-width: 100px; text-align: center; color: var(--text); }
@@ -1338,17 +1339,22 @@ async function openLeaderboard() {
   // спид-бонус ТОЛЬКО среди понявших всё (base>=10) — скорость как приправа, не основа
   const full = today.filter(s => s.base >= 10).sort((a, b) => b.effWpm - a.effWpm);
   const bonus = {}; full.forEach((s, i) => { bonus[s.name] = i === 0 ? 3 : i === 1 ? 2 : i === 2 ? 1 : 0; });
-  const rows = today.map(s => ({ name: s.name, pts: s.base + (bonus[s.name] || 0) })).sort((a, b) => b.pts - a.pts);
+  const rows = today.map(s => ({ name: s.name, pts: s.base + (bonus[s.name] || 0) }));
+  // честный «эталон-задавала»: планка дня для холодного старта, а не выдуманный коллега
+  const ETALON = 11;
+  rows.push({ name: '📖 Эталон дня', pts: ETALON, ghost: true });
+  rows.sort((a, b) => b.pts - a.pts);
   const meObj = await LB.me(); const me = meObj ? meObj.name : null;
   // азарт через «погоню за лидером», без шейминга последнего места
   const myRow = me ? rows.find(r => r.name === me) : null;
-  const top = rows.length ? rows[0].pts : 0;
-  $('lbHead').innerHTML = !rows.length ? 'Сегодня ещё никто не играл — будь первым!'
-    : (myRow ? 'Твои очки: <b>' + myRow.pts + '</b> · лидер: ' + top
-        + (myRow.pts < top ? ' · до лидера ' + (top - myRow.pts) : ' · ты ведёшь! 🔥') + ' · сыграли ' + rows.length
-       : 'Сегодня сыграли ' + rows.length + ' — сыграй и попади в список');
+  const top = rows[0].pts;
+  const realCount = today.length;  // считаем людей, без эталона
+  $('lbHead').innerHTML = myRow
+    ? 'Твои очки: <b>' + myRow.pts + '</b> · лидер: ' + top
+        + (myRow.pts < top ? ' · до лидера ' + (top - myRow.pts) : ' · ты ведёшь! 🔥') + ' · сыграли ' + realCount
+    : 'Обгони <b>эталон дня (' + ETALON + ')</b> — стань первым' + (realCount ? ' · сыграли ' + realCount : '');
   $('lbList').innerHTML = rows.map((r, i) =>
-    '<div class="lb-row' + (r.name === me ? ' me' : '') + '"><span class="rk">' + (i + 1) + '</span><span class="nm">' + escapeHtml(r.name) + '</span><span class="pt">' + r.pts + '</span></div>'
+    '<div class="lb-row' + (r.name === me ? ' me' : '') + (r.ghost ? ' ghost' : '') + '"><span class="rk">' + (i + 1) + '</span><span class="nm">' + escapeHtml(r.name) + '</span><span class="pt">' + r.pts + '</span></div>'
   ).join('');
   showScreen('leaderboard');
 }
