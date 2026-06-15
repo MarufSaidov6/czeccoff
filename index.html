@@ -5,24 +5,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Чехов — быстрое чтение</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
   :root {
+    /* base palette (design system) */
     --bg: #16161a;
     --surface: #1f1f26;
     --surface-2: #2a2a33;
+    --surface-3: #34343f;
     --text: #e8e6e1;
     --muted: #8a8894;
-    --accent: #ff5a4e;
-    --accent-dim: #b8453d;
     --guide: #3a3a44;
     --punct: #5d5b66;
+    --accent: #ff5a4e;
+    --accent-hov: #ff6f64;
+    --accent-dim: #b8453d;
+    --ok: #6fcf97;
+    --scrim: rgba(10,10,14,.65);
+    /* fonts — Manrope per the brand design system, system stack as fallback */
+    --font-sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: Georgia, "Times New Roman", serif;
     --wsize: 1;
-    --wfont: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --wfont: var(--font-sans);
+    /* spacing / radii / motion (design-system scale) */
+    --space-1:4px; --space-2:6px; --space-3:8px; --space-4:10px; --space-5:12px; --space-6:14px; --space-7:16px; --space-8:20px; --space-9:22px; --space-10:24px;
+    --r-xs:4px; --r-sm:8px; --r-md:10px; --r-lg:12px; --r-xl:16px; --r-pill:20px;
+    --dur-fast:.15s; --dur-base:.25s; --dur-fade:.35s; --ease:ease;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased; overflow: hidden;
   }
   .screen { display: none; height: 100vh; height: 100dvh; flex-direction: column; }
@@ -220,19 +233,55 @@
   .tp-lbl { font-size: 12px; color: var(--muted); }
   .tp-word { font-size: 22px; font-weight: 600; min-width: 100px; text-align: center; color: var(--text); }
   /* ===== Онбординг (воронка первого запуска) ===== */
-  .ob-panel { width: min(92vw, 420px); text-align: center; position: relative; }
-  .ob-panel h2 { font-size: 22px; margin-bottom: 8px; }
-  .ob-sub { color: var(--muted); font-size: 14px; margin: 8px 0 18px; line-height: 1.5; }
-  .ob-skip { position: absolute; top: -8px; right: -4px; background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; }
+  /* ===== Онбординг (7-шаговая воронка, дизайн-система) ===== */
+  #onboard.overlay { align-items: stretch; justify-content: center; background: var(--bg); }
+  .ob-col { width: 100%; max-width: 420px; min-height: 100dvh; display: flex; flex-direction: column; padding: 16px 24px calc(26px + env(safe-area-inset-bottom)); }
+  #obBody { flex: 1; display: flex; flex-direction: column; }
+  .ob-fill { flex: 1; display: flex; flex-direction: column; }
+  .ob-center { align-items: center; justify-content: center; }
+  .ob-trail { display: flex; align-items: center; gap: 12px; height: 28px; margin-bottom: 8px; }
+  .ob-back { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 4px; }
+  .ob-seg { flex: 1; display: flex; gap: 5px; }
+  .ob-seg i { flex: 1; height: 4px; border-radius: var(--r-xs); background: var(--surface-2); transition: background .3s var(--ease); }
+  .ob-seg i.on { background: var(--accent); }
+  .ob-wm { font-size: 40px; font-weight: 600; text-align: center; }
+  .ob-wm span { color: var(--accent); }
+  .ob-h1 { font-size: 26px; font-weight: 600; margin: 8px 0; line-height: 1.2; }
+  .ob-lead { color: var(--muted); font-size: 15px; line-height: 1.55; margin: 0; }
+  .ob-promise { color: var(--text); font-size: 18px; text-align: center; line-height: 1.5; }
+  .ob-list { display: flex; flex-direction: column; gap: 10px; margin: 20px 0; }
+  .obcta { width: 100%; margin-top: 8px; }
+  .ob-skip { display: block; width: 100%; background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer; margin-top: 14px; }
   .ob-skip:hover { color: var(--text); }
-  .ob-flash { height: 84px; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 600; }
-  .ob-flash .ob-orp { color: var(--accent); }
-  .ob-rev { font-size: 16px; line-height: 1.6; }
-  .ob-rev b { color: var(--accent); }
-  .ob-goals { display: flex; gap: 8px; justify-content: center; margin: 14px 0 18px; }
-  .ob-goals button { flex: 1; background: var(--surface-2); border: 1px solid var(--guide); color: var(--text); border-radius: 10px; padding: 12px 0; font-size: 14px; cursor: pointer; }
-  .ob-goals button:hover, .ob-goals button.sel { border-color: var(--accent); }
-  .ob-panel .btn { width: 100%; margin-top: 8px; }
+  .ob-badge { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .ob-ret { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .ob-tick { width: 2px; height: 14px; background: var(--guide); }
+  .ob-wr { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: baseline; font-weight: 500; letter-spacing: .01em; width: min(82vw, 360px); font-size: 40px; }
+  .ob-wr .ob-pre { text-align: right; white-space: pre; }
+  .ob-wr .ob-orp { color: var(--accent); text-align: center; white-space: pre; }
+  .ob-wr .ob-post { text-align: left; white-space: pre; }
+  .ob-pick { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--guide); border-radius: var(--r-lg); padding: 14px 16px; cursor: pointer; transition: border-color .2s var(--ease); text-align: left; width: 100%; color: var(--text); }
+  .ob-pick.sel { border-color: var(--accent); }
+  .ob-pick .ico { width: 44px; height: 44px; border-radius: var(--r-md); flex-shrink: 0; background: var(--surface-2); border: 1px solid var(--guide); color: var(--text); display: flex; align-items: center; justify-content: center; transition: .2s var(--ease); }
+  .ob-pick.sel .ico { border-color: var(--accent); color: var(--accent); }
+  .ob-pick .tt { flex: 1; }
+  .ob-pick .tt b { font-weight: 600; }
+  .ob-pick .tt small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .ob-radio { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--guide); display: flex; align-items: center; justify-content: center; transition: border-color .2s var(--ease); }
+  .ob-pick.sel .ob-radio { border-color: var(--accent); }
+  .ob-pick.sel .ob-radio::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+  .ob-bdg { font-size: 12px; letter-spacing: .04em; color: var(--accent-dim); border: 1px solid var(--accent-dim); border-radius: var(--r-xs); padding: 2px 6px; }
+  .ob-big { font-size: 52px; font-weight: 700; color: var(--accent); line-height: 1; text-align: center; }
+  .ob-statcard { background: var(--surface); border: 1px solid var(--guide); border-radius: var(--r-lg); padding: 16px; display: flex; justify-content: space-around; }
+  .ob-stat { text-align: center; }
+  .ob-stat b { font-size: 22px; font-weight: 700; }
+  .ob-stat b.acc { color: var(--accent); }
+  .ob-stat small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .ob-name { width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--guide); border-radius: var(--r-md); padding: 14px 16px; font-size: 16px; font-family: inherit; outline: none; }
+  .ob-name:focus { border-color: var(--muted); }
+  .ob-card { background: var(--surface); border: 1px solid var(--guide); border-radius: var(--r-lg); padding: 16px; }
+  .ob-lb-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: var(--r-sm); font-size: 14px; }
+  .ob-lb-row.me { background: var(--surface-2); border: 1px solid var(--accent); }
 </style>
 </head>
 <body>
@@ -365,8 +414,8 @@
 
 <!-- ===================== ОНБОРДИНГ ===================== -->
 <div id="onboard" class="overlay">
-  <div class="panel ob-panel">
-    <button class="ob-skip" id="obSkip">Пропустить</button>
+  <div class="ob-col">
+    <div id="obTrail"></div>
     <div id="obBody"></div>
   </div>
 </div>
@@ -479,7 +528,7 @@ function applySettings() {
   document.documentElement.style.setProperty('--wsize', settings.size / 100);
   document.documentElement.style.setProperty('--wfont',
     settings.font === 'serif' ? 'Georgia, "Times New Roman", serif'
-    : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
+    : '"Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
   $('reader').classList.toggle('hud', settings.hud);
   localStorage.setItem('fr_set', JSON.stringify(settings));
 }
@@ -1395,55 +1444,124 @@ $('lbBack').onclick = goHome;
 $('czkBoardBtn').onclick = openLeaderboard;
 czkLoad();
 
-/* ============ Онбординг: воронка первого запуска ============ */
-// Завлечение по ресёрчу: wow-демо (прогресс за ~20с) → коммит к цели → в турнир.
-// Без персонажа и давления, пропускаемо, один раз на устройство.
-const OB_DEMO = ['Ты', 'читаешь', 'быстрее,', 'чем', 'думаешь', '—', 'слова', 'не', 'убегают,', 'глаза', 'стоят', 'на', 'месте.'];
+/* ============ Онбординг: 7-шаговая воронка (дизайн-система) ============ */
+// Duolingo-логика в тёмном скине: ценность сразу → обучение → персонализация →
+// первая победа + имя → цель → турнир. Реальный ORP-ретикл, без выдуманных коллег.
+const OB_STEPS = ['welcome', 'how', 'why', 'test', 'result', 'goal', 'tournament'];
+const OB_DEMO = 'Глаза не двигаются — слово появляется в одной точке'.split(' ');
+const OB_TEST = 'Чтение по одному слову освобождает глаза от движения по строке и поднимает скорость без потери смысла'.split(' ');
+const OB_WHY = [['book', 'Глотать книги целиком', 'список «прочитать потом» наконец закончится'], ['briefcase', 'Обгонять работу', 'письма, статьи и отчёты — вдвое быстрее'], ['cap', 'Учиться без зубрёжки', 'конспекты и лекции за вечер, а не за ночь']];
+const OB_GOALS = [[5, '5 мин', 'Спокойно', 0], [10, '10 мин', 'Уверенно', 1], [20, '20 мин', 'Серьёзно', 0], [30, '30 мин', 'Интенсив', 0]];
+const OB_ICONS = {
+  book: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
+  briefcase: '<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><path d="M2 9h20v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/>',
+  cap: '<path d="M21.42 10.92a1 1 0 0 0-.02-1.84L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.83l8.57 3.91a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/>',
+};
+const obIcon = n => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (OB_ICONS[n] || '') + '</svg>';
+const ob = { step: 0, why: null, goal: 10, name: '', result: null };
 let obTimer = null;
-function obWord(w) { const c = [...w]; return '<span class="ob-orp">' + escapeHtml(c[0] || '') + '</span>' + escapeHtml(c.slice(1).join('')); }
-function obEnd() { clearInterval(obTimer); obTimer = null; localStorage.setItem('czk_onboarded', '1'); $('onboard').classList.remove('open'); }
-function obStep(n) {
-  clearInterval(obTimer); obTimer = null;
-  const b = $('obBody');
-  if (n === 1) {
-    b.innerHTML = '<h2>Читай заметно быстрее</h2><p class="ob-sub">Слова мелькают по одному — глаза не двигаются. Попробуй, это 20 секунд.</p><button class="btn primary" id="obGo">Поехали →</button>';
-    $('obGo').onclick = () => obStep(2);
-  } else if (n === 2) {
+
+const obRet = () => '<div class="ob-ret"><div class="ob-tick"></div><div class="ob-wr"><span class="ob-pre"></span><span class="ob-orp"></span><span class="ob-post"></span></div><div class="ob-tick"></div></div>';
+function obSetWord(word, px) {
+  const wr = $('obBody').querySelector('.ob-wr'); if (!wr) return;
+  if (px) wr.style.fontSize = px + 'px';
+  const chars = [...(word || '')];
+  const ci = orpCharIndex(chars, '500 ' + (px || 40) + 'px ' + getComputedStyle(document.body).fontFamily);
+  wr.children[0].textContent = chars.slice(0, ci).join('');
+  wr.children[1].textContent = chars[ci] || '';
+  wr.children[2].textContent = chars.slice(ci + 1).join('');
+}
+function obRsvp(words, wpm, loop, onWord, onDone) {
+  clearTimeout(obTimer); let i = 0;
+  const tick = () => {
+    if (i >= words.length) { if (loop) i = 0; else { onDone && onDone(); return; } }
+    const w = words[i] || ''; onWord(w);
+    let m = 1; if (/[.!?…]$/.test(w)) m += 1.4; else if (/[,;:]$/.test(w)) m += 0.6;
+    if (w.replace(/[^\p{L}\p{N}]/gu, '').length >= 10) m += 0.3;
+    i++; obTimer = setTimeout(tick, (60000 / wpm) * m);
+  };
+  tick();
+}
+function obTrail() {
+  const total = OB_STEPS.length - 1;
+  if (ob.step < 1) return '';
+  let segs = ''; for (let k = 0; k < total; k++) segs += '<i class="' + (k < ob.step ? 'on' : '') + '"></i>';
+  return '<div class="ob-trail"><button class="ob-back" id="obBack" aria-label="Назад"' + (ob.step <= 1 ? ' style="visibility:hidden"' : '') + '>←</button><div class="ob-seg">' + segs + '</div></div>';
+}
+function obEnd() { clearTimeout(obTimer); localStorage.setItem('czk_onboarded', '1'); $('onboard').classList.remove('open'); }
+function obGo(name) { ob.step = OB_STEPS.indexOf(name); obRender(); }
+function obShow() {
+  if (localStorage.getItem('czk_onboarded') || localStorage.getItem('fr_last')) return;
+  ob.step = 0; obRender(); $('onboard').classList.add('open');
+}
+function obRender() {
+  clearTimeout(obTimer);
+  const b = $('obBody'); const s = OB_STEPS[ob.step];
+  $('obTrail').innerHTML = obTrail();
+  if ($('obBack')) $('obBack').onclick = () => { ob.step = Math.max(0, ob.step - 1); obRender(); };
+
+  if (s === 'welcome') {
+    b.innerHTML = '<div class="ob-fill ob-center" style="gap:26px"><div class="ob-wm">Чехов<span>.</span></div>' + obRet() + '<div class="ob-promise">Читай вдвое быстрее.<br>Глаза — на месте.</div></div><button class="btn primary obcta" id="obc">Поехали</button>';
+    obSetWord('быстрее', 44);
+    $('obc').onclick = () => obGo('how');
+
+  } else if (s === 'how') {
     track('demo');
-    b.innerHTML = '<div class="ob-flash" id="obFlash"></div><div class="ob-rev" id="obRev"></div>';
-    const fl = $('obFlash'); let i = 0;
-    obTimer = setInterval(() => {
-      if (i >= OB_DEMO.length) {
-        clearInterval(obTimer); obTimer = null; fl.textContent = '';
-        $('obRev').innerHTML = 'Ты только что читал на <b>≈400 сл/мин</b> 🚀 — быстрее обычного.<button class="btn primary" id="obNext">Дальше →</button>';
-        $('obNext').onclick = () => obStep(3);
-        return;
-      }
-      fl.innerHTML = obWord(OB_DEMO[i]); i++;
-    }, 150);  // 150мс/слово = 400 сл/мин (честно)
-  } else {
-    track('commit');
-    b.innerHTML = '<h2>Держи серию</h2><p class="ob-sub">Сколько дней подряд читаем в Кубке?</p>'
-      + '<div class="ob-goals"><button data-g="3">3 дня</button><button data-g="7">7 дней</button><button data-g="14">14 дней</button></div>'
-      + '<p class="ob-sub">Коллеги уже соревнуются — обгони Эталон дня.</p>'
-      + '<button class="btn primary" id="obTurnir">🏆 В Турнир дня</button>'
-      + '<button class="btn" id="obRead">Просто читать</button>';
-    b.querySelectorAll('.ob-goals button').forEach(btn => btn.onclick = () => {
-      localStorage.setItem('czk_goal', btn.dataset.g);
-      b.querySelectorAll('.ob-goals button').forEach(x => x.classList.remove('sel'));
-      btn.classList.add('sel');
-    });
-    $('obTurnir').onclick = () => { obEnd(); openTournament(); };
-    $('obRead').onclick = obEnd;
+    b.innerHTML = '<div class="ob-h1">Одно слово. Одна точка.</div><p class="ob-lead">Красная буква — якорь. Держи взгляд на ней и не води глазами по строке.</p><div class="ob-fill ob-center">' + obRet() + '</div><button class="btn primary obcta" id="obc">Понятно</button>';
+    obRsvp(OB_DEMO, 260, true, w => obSetWord(w, 38));
+    $('obc').onclick = () => obGo('why');
+
+  } else if (s === 'why') {
+    const cards = OB_WHY.map(([id, t, m]) => '<button class="ob-pick' + (ob.why === id ? ' sel' : '') + '" data-id="' + id + '"><span class="ico">' + obIcon(id) + '</span><span class="tt"><b>' + t + '</b><small>' + m + '</small></span><span class="ob-radio"></span></button>').join('');
+    b.innerHTML = '<div class="ob-h1">Зачем тебе скорость?</div><p class="ob-lead">Подберём тексты и цель под тебя.</p><div class="ob-list ob-fill">' + cards + '</div><button class="btn primary obcta" id="obc"' + (ob.why ? '' : ' disabled') + '>Дальше</button><button class="ob-skip" id="obs">Пропустить — шаг необязательный</button>';
+    b.querySelectorAll('.ob-pick').forEach(p => p.onclick = () => { ob.why = p.dataset.id; b.querySelectorAll('.ob-pick').forEach(x => x.classList.remove('sel')); p.classList.add('sel'); $('obc').disabled = false; });
+    $('obc').onclick = () => obGo('test'); $('obs').onclick = () => obGo('test');
+
+  } else if (s === 'test') {
+    b.innerHTML = '<div class="ob-h1">Проверим твой темп</div><p class="ob-lead">Прочитай короткий отрывок. Засечём, сколько слов в минуту у тебя получается прямо сейчас.</p><div class="ob-fill ob-center" style="gap:18px">' + obRet() + '<span class="ob-badge" id="obtb">' + OB_TEST.length + ' слов · ~' + Math.round(OB_TEST.length / 5) + ' сек</span></div><button class="btn primary obcta" id="obc">Начать чтение</button>';
+    obSetWord('300', 38);
+    let started = 0, running = false;
+    $('obc').onclick = () => {
+      if (running) return; running = true; started = performance.now();
+      $('obc').textContent = 'Читаю…'; $('obc').disabled = true; $('obtb').style.visibility = 'hidden';
+      obRsvp(OB_TEST, 300, false, w => obSetWord(w, 38), () => {
+        const secs = (performance.now() - started) / 1000;
+        ob.result = { words: OB_TEST.length, secs: Math.max(1, Math.round(secs)), wpm: Math.round(OB_TEST.length / (secs / 60)) };
+        setTimeout(() => obGo('result'), 450);
+      });
+    };
+
+  } else if (s === 'result') {
+    const r = ob.result || { words: OB_TEST.length, secs: 5, wpm: 300 };
+    b.innerHTML = '<div class="ob-fill" style="justify-content:center;gap:20px">'
+      + '<div><div class="ob-big">' + r.wpm + '</div><div class="ob-lead" style="text-align:center">слов в минуту 🎉</div></div>'
+      + '<p class="ob-lead" style="text-align:center">Средний читатель — около <b style="color:var(--text)">200 сл/мин</b>. Ты уже быстрее. Через неделю тренировок — <b style="color:var(--text)">450+</b>.</p>'
+      + '<div class="ob-statcard"><div class="ob-stat"><b>' + r.words + '</b><small>слов</small></div><div class="ob-stat"><b>' + r.secs + ' с</b><small>время</small></div><div class="ob-stat"><b class="acc">' + r.wpm + '</b><small>факт, сл/мин</small></div></div>'
+      + '<div><div style="font-size:14px;margin-bottom:8px">Закрепим результат за тобой:</div><input class="ob-name" id="obn" maxlength="24" placeholder="Как тебя зовут?"></div>'
+      + '</div><button class="btn primary obcta" id="obc">Дальше</button>';
+    const inp = $('obn'); inp.value = ob.name; inp.oninput = () => ob.name = inp.value;
+    $('obc').onclick = () => obGo('goal');
+
+  } else if (s === 'goal') {
+    const gc = OB_GOALS.map(([id, m, tag, rec]) => '<button class="ob-pick' + (ob.goal === id ? ' sel' : '') + '" data-g="' + id + '"><span class="tt"><b>' + m + '</b><small>' + tag + '</small></span>' + (rec ? '<span class="ob-bdg">рекомендуем</span>' : '') + '<span class="ob-radio"></span></button>').join('');
+    b.innerHTML = '<div class="ob-h1">Сколько минут в день?</div><p class="ob-lead">Маленькая цель, которую легко держать. Менять можно когда угодно.</p><div class="ob-list ob-fill">' + gc + '</div><button class="btn primary obcta" id="obc">Поставить цель</button><button class="ob-skip" id="obs">Пропустить — поставлю позже</button>';
+    localStorage.setItem('czk_goal', ob.goal); track('commit');
+    b.querySelectorAll('.ob-pick').forEach(p => p.onclick = () => { ob.goal = +p.dataset.g; localStorage.setItem('czk_goal', ob.goal); b.querySelectorAll('.ob-pick').forEach(x => x.classList.remove('sel')); p.classList.add('sel'); });
+    $('obc').onclick = () => obGo('tournament'); $('obs').onclick = () => obGo('tournament');
+
+  } else if (s === 'tournament') {
+    const nm = ob.name.trim() || 'Ты'; const my = (ob.result && ob.result.wpm) || 300;
+    b.innerHTML = '<div class="ob-fill" style="gap:16px">'
+      + '<div style="text-align:center;margin-top:6px"><div class="ob-h1" style="margin:0">Готово, ' + escapeHtml(nm) + '! 🎉</div><div class="ob-lead" style="margin-top:8px">Цель: ' + ob.goal + ' мин в день. День 1 начат — держи серию.</div></div>'
+      + '<div class="ob-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:600"><span>🏆</span> Турнир дня · команда</div>'
+      + '<div class="ob-lb-row me"><span style="color:var(--muted);width:22px">—</span><span style="flex:1">' + escapeHtml(nm) + ' · ты</span><span style="color:var(--accent);font-weight:600">' + my + '</span></div>'
+      + '<div class="ob-lb-row"><span style="width:22px;text-align:center">📖</span><span style="flex:1;color:var(--muted)">Эталон дня</span><span style="color:var(--muted)">обгони</span></div></div>'
+      + '<div class="ob-card"><span class="ob-badge">Эталон дня</span><div style="font-size:15px;line-height:1.5;margin-top:8px">«Дама с собачкой» · отрывок на 120 слов</div><div class="ob-lead" style="margin-top:6px">Цель: 400 сл/мин + 2 вопроса на понимание</div></div>'
+      + '</div><button class="btn primary obcta" id="obc">В турнир →</button><button class="ob-skip" id="obs">Позже — на главную</button>';
+    $('obc').onclick = async () => { const n = ob.name.trim(); if (n) await LB.signIn(n); obEnd(); openTournament(); };
+    $('obs').onclick = obEnd;
   }
 }
-function obShow() {
-  // только новичкам: ни прошлого чтения, ни пройденного онбординга
-  if (localStorage.getItem('czk_onboarded') || localStorage.getItem('fr_last')) return;
-  obStep(1);
-  $('onboard').classList.add('open');
-}
-$('obSkip').onclick = obEnd;
 
 state.wpm = +(localStorage.getItem('fr_wpm') || 300);
 applySettings();
