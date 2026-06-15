@@ -244,7 +244,7 @@
   .ob-seg { flex: 1; display: flex; gap: 5px; }
   .ob-seg i { flex: 1; height: 4px; border-radius: var(--r-xs); background: var(--surface-2); transition: background .3s var(--ease); }
   .ob-seg i.on { background: var(--accent); }
-  .ob-wm { font-size: 40px; font-weight: 600; text-align: center; }
+  .ob-wm { font-size: 22px; font-weight: 600; text-align: center; letter-spacing: -.01em; }
   .ob-wm span { color: var(--accent); }
   .ob-h1 { font-size: 26px; font-weight: 600; margin: 8px 0; line-height: 1.2; }
   .ob-lead { color: var(--muted); font-size: 15px; line-height: 1.55; margin: 0; }
@@ -1558,7 +1558,7 @@ function obRender() {
   if ($('obBack')) $('obBack').onclick = () => { ob.step = Math.max(0, ob.step - 1); obRender(); };
 
   if (s === 'welcome') {
-    b.innerHTML = '<div class="ob-fill ob-center" style="gap:30px"><div class="ob-wm">Чехов<span>.</span></div><div class="ob-fixframe">' + obRet() + '<div class="ob-attrib" id="obAttrib"></div></div><div class="ob-promise">Слово приходит само&nbsp;—<br>глаза стоят на месте.</div></div><button class="btn primary obcta" id="obc">Поехали</button><div class="ob-sublabel">30 секунд на калибровку · без аккаунта</div>';
+    b.innerHTML = '<div class="ob-wm">Чехов<span>.</span></div><div class="ob-fill ob-center" style="gap:30px"><div class="ob-fixframe">' + obRet() + '<div class="ob-attrib" id="obAttrib"></div></div><div class="ob-promise">Слово приходит само&nbsp;—<br>глаза стоят на месте.</div></div><button class="btn primary obcta" id="obc">Поехали</button><div class="ob-sublabel">30 секунд на калибровку · без аккаунта</div>';
     obWelcomeStream();
     $('obc').onclick = () => obGo('how');
 
