@@ -12,3 +12,9 @@ Thumbs.db
 /my-books/
 *.private.fb2
 *.private.txt
+
+# Node / Playwright (dev-харнес E2E)
+node_modules/
+playwright-report/
+test-results/
+.playwright/
