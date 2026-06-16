@@ -198,6 +198,32 @@
   #finishStats .k { font-size: 12px; color: var(--muted); margin-top: 2px; }
   #finishReg { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; font-size: 14px; color: var(--muted); display: none; margin-bottom: 6px; }
   #finishReg b { color: var(--text); }
+  /* ===== След сессии ===== */
+  .panel.sled { width: min(94vw, 460px); }
+  .sled-over { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .sled-title { font-size: 19px; font-weight: 700; margin: 2px 0 14px; }
+  .sled-hero { position: relative; background: var(--surface-2); border: 1px solid var(--guide); border-radius: 14px; padding: 14px 14px 12px; }
+  #sledSvg { display: block; width: 100%; height: 150px; }
+  .sled-hero .ln { fill: none; stroke: var(--text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .sled-hero .reg { fill: var(--accent); }
+  .sled-legend { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .sled-legend .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  .sled-play { position: absolute; right: 14px; bottom: 30px; background: var(--surface); border: 1px solid var(--guide); color: var(--muted); border-radius: 9px; padding: 6px 12px; font-size: 12px; font-family: inherit; cursor: pointer; }
+  .sled-play:hover { color: var(--text); border-color: var(--muted); }
+  .sled-row { display: flex; gap: 10px; margin: 12px 0; }
+  .sled-smooth { background: var(--surface-2); border: 1px solid var(--guide); border-radius: 12px; padding: 14px 16px; text-align: center; min-width: 98px; }
+  .sled-smooth .v { font-size: 30px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .sled-smooth .k { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .sled-smooth .d { font-size: 12px; margin-top: 6px; color: var(--muted); }
+  .sled-smooth .d.up { color: #6fcf97; }
+  .sled-insight { flex: 1; background: var(--surface-2); border: 1px solid var(--guide); border-radius: 12px; padding: 14px 16px; }
+  .sled-insight .t { font-size: 14px; font-weight: 600; }
+  .sled-insight .b { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .sled-coll { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .sled-coll .mini { width: 46px; height: 22px; background: var(--surface-2); border: 1px solid var(--guide); border-radius: 6px; padding: 3px; }
+  .sled-coll .mini.cur { border-color: var(--accent); }
+  .sled-coll .mini svg { display: block; width: 100%; height: 100%; }
+  .sled-coll .cnt { font-size: 11px; color: var(--muted); margin-left: auto; }
   .panel .btnrow { display: flex; gap: 10px; margin-top: 16px; }
   .panel .btnrow .btn { flex: 1; }
 
@@ -509,18 +535,29 @@
 
 <!-- ===================== FINISH ===================== -->
 <div id="finish" class="overlay">
-  <div class="panel">
-    <h2>Готово 🎉</h2>
+  <div class="panel sled">
+    <div class="sled-over">След сессии</div>
+    <div class="sled-title" id="sledTitle">—</div>
+    <div class="sled-hero">
+      <svg id="sledSvg" viewBox="0 0 322 150" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <div class="sled-legend"><span class="dot"></span> красный — где ты возвращался</div>
+      <button class="sled-play" id="sledPlay">▶ ритм</button>
+    </div>
+    <div class="sled-row">
+      <div class="sled-smooth"><div class="v" id="sledSmooth">0</div><div class="k">ровность</div><div class="d" id="sledDelta"></div></div>
+      <div class="sled-insight"><div class="t" id="sledInsightT"></div><div class="b" id="sledInsightB"></div></div>
+    </div>
+    <div class="sled-coll" id="sledColl"></div>
     <div id="finishStats">
       <div><div class="v" id="finW">0</div><div class="k">слов</div></div>
       <div><div class="v" id="finT">0:00</div><div class="k">время</div></div>
-      <div><div class="v" id="finS">0</div><div class="k">сл/мин факт</div></div>
+      <div><div class="v" id="finS">0</div><div class="k">сл/мин</div></div>
     </div>
     <div id="finishReg"></div>
     <div class="btnrow">
       <button class="btn" id="finRegBtn" style="display:none">Сложные места</button>
-      <button class="btn" id="finRestart">⟲ Сначала</button>
-      <button class="btn primary" id="finHome">На главную</button>
+      <button class="btn primary" id="finRestart">Ещё отрывок — ровнее</button>
+      <button class="btn" id="finHome">На главную</button>
     </div>
   </div>
 </div>
@@ -787,6 +824,8 @@ const state = {
   maxIdx: 0,                      // фронтир: слова считаются один раз
   nonSepRatio: 1,
   regs: {},                       // карта регрессий: стартИндекс -> число возвратов
+  paceSamples: [],                // {idx, wpm} по новым словам — для «Следа» (ритм чтения)
+  sessionRegs: {},                // возвраты ТЕКУЩЕЙ попытки (след), отдельно от пожизненной regs
   cleanMs: 0,                     // чистое время без перемоток (для тренера)
   finished: false,
 };
@@ -966,6 +1005,8 @@ function tick() {
 
   let delay = wordDelay(t, 60000 / state.wpm);
   if (state.rampLeft > 0) { delay *= 1 + state.rampLeft * 0.35; state.rampLeft--; }
+  // «След»: мгновенный темп на каждом НОВОМ слове (умный темп рисует провалы на паузах)
+  if (!t.sep && state.idx === state.maxIdx) state.paceSamples.push({ idx: state.idx, wpm: Math.min(1200, 60000 / delay) });
 
   // смена слов: пустой зазор (ISI) перед следующим словом снижает взаимную
   // маскировку — на всех скоростях. fade гасит плавно, gap — резко, cut — без зазора
@@ -1013,6 +1054,109 @@ function pause() {
   renderContext(); updateStats(); saveProgress(); flushDay();
 }
 
+/* ============ След сессии ============ */
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function smoothPath(pts) { // Catmull-Rom → кубические безье
+  if (pts.length < 2) return pts.length ? `M${pts[0].x} ${pts[0].y}` : '';
+  let d = `M${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+function insightFor(regCount) {
+  if (regCount === 0) return ['Ни одного возврата', 'Чистый проход — взгляд ни разу не отступил назад.'];
+  if (regCount <= 3) return ['Возвраты — рядом', 'Похоже, там был трудный абзац. Остальное прошло ровно.'];
+  return [`${regCount} ${plural(regCount, 'возврат', 'возврата', 'возвратов')}`, 'Материал держал в напряжении — нормально для сложного текста.'];
+}
+function buildTrace() {
+  const starts = state.starts, nS = starts.length;
+  const sums = new Array(nS).fill(0), cnts = new Array(nS).fill(0);
+  const sentOf = idx => { let so = 0; for (let i = 0; i < nS; i++) { if (starts[i] <= idx) so = i; else break; } return so; };
+  for (const s of state.paceSamples) { const so = sentOf(s.idx); sums[so] += s.wpm; cnts[so]++; }
+  const series = [];
+  for (let i = 0; i < nS; i++) if (cnts[i] > 0) series.push({ ord: i, wpm: sums[i] / cnts[i] });
+  const regOrds = Object.keys(state.sessionRegs).map(k => starts.indexOf(+k)).filter(o => o >= 0);
+  const regCount = regOrds.length;
+  if (series.length < 2) return { pts: [], regs: [], smoothness: 0, regCount, short: true };
+  const mean = series.reduce((a, b) => a + b.wpm, 0) / series.length, ref = mean * 1.25 || 1;
+  series.forEach(p => p.p01 = Math.max(0, Math.min(1, p.wpm / ref)));
+  const mp = series.reduce((a, b) => a + b.p01, 0) / series.length;
+  const variance = series.reduce((a, b) => a + (b.p01 - mp) ** 2, 0) / series.length;
+  const smoothness = Math.round(Math.max(38, Math.min(98, 100 - variance * 430 - regCount * 3)));
+  const W = 322, H = 150, pad = 16;
+  const pts = series.map((p, i) => ({ x: i / (series.length - 1) * W, y: H - pad - p.p01 * (H - pad * 2), ord: p.ord }));
+  const regs = regOrds.map(o => pts.find(p => p.ord === o)).filter(Boolean);
+  return { pts, regs, smoothness, regCount };
+}
+function loadTraces() { try { return JSON.parse(localStorage.getItem('fr_traces') || '[]'); } catch (e) { return []; } }
+function weekAvgSmoothness(traces) {
+  const v = traces.filter(t => t.ts >= Date.now() - 7 * 864e5 && t.smoothness).map(t => t.smoothness);
+  return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null;
+}
+function countUp(el, target, dur) {
+  const t0 = performance.now();
+  const step = now => { const k = Math.min(1, (now - t0) / dur); el.textContent = Math.round(target * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function miniTrace(sm, cur) {
+  const wrap = document.createElement('div'); wrap.className = 'mini' + (cur ? ' cur' : '');
+  const svg = svgEl('svg', { viewBox: '0 0 46 18', preserveAspectRatio: 'none' }), jag = (98 - (sm || 60)) / 60, pts = [];
+  for (let i = 0; i < 10; i++) pts.push({ x: i / 9 * 46, y: 9 - Math.sin(i * 2.3 + (sm || 1)) * jag * 7 });
+  svg.appendChild(svgEl('path', { d: smoothPath(pts), fill: 'none', stroke: cur ? '#ff5a4e' : '#8a8894', 'stroke-width': 1.3 }));
+  wrap.appendChild(svg); return wrap;
+}
+function renderCollection(curTr, past) {
+  const host = $('sledColl'); host.innerHTML = '';
+  past.slice(-3).forEach(t => host.appendChild(miniTrace(t.smoothness, false)));
+  host.appendChild(miniTrace(curTr.short ? 60 : curTr.smoothness, true));
+  const cnt = document.createElement('div'); cnt.className = 'cnt';
+  cnt.textContent = Math.min(12, past.filter(t => t.ts >= Date.now() - 7 * 864e5).length + 1) + ' из 12 на неделе';
+  host.appendChild(cnt);
+}
+let sledAnim = null;
+function renderSled(tr) {
+  $('sledTitle').textContent = state.title;
+  const svg = $('sledSvg'); svg.innerHTML = '';
+  const past = loadTraces();
+  if (tr.short) {
+    $('sledSmooth').textContent = '—';
+    $('sledDelta').textContent = 'короткий след'; $('sledDelta').className = 'd';
+    $('sledInsightT').textContent = 'Короткий отрывок'; $('sledInsightB').textContent = 'Прочитай побольше — и след оживёт.';
+    renderCollection(tr, past); return;
+  }
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const pathEl = svgEl('path', { class: 'ln', d: smoothPath(tr.pts) });
+  svg.appendChild(pathEl);
+  const regEls = tr.regs.map(p => { const c = svgEl('circle', { class: 'reg', cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: reduce ? 4 : 0 }); svg.appendChild(c); return c; });
+  const week = weekAvgSmoothness(past), delta = week == null ? null : tr.smoothness - week;
+  $('sledDelta').textContent = delta == null ? 'первый след недели' : (delta >= 0 ? '+' + delta : '' + delta) + ' к среднему';
+  $('sledDelta').className = 'd' + (delta != null && delta >= 0 ? ' up' : '');
+  const [it, ib] = insightFor(tr.regCount);
+  $('sledInsightT').textContent = it; $('sledInsightB').textContent = ib;
+  renderCollection(tr, past);
+  if (reduce) { $('sledSmooth').textContent = tr.smoothness; return; }
+  const len = pathEl.getTotalLength();
+  pathEl.style.strokeDasharray = len; pathEl.style.strokeDashoffset = len;
+  pathEl.style.transition = 'stroke-dashoffset 1.25s cubic-bezier(.22,.61,.36,1)';
+  requestAnimationFrame(() => { pathEl.style.strokeDashoffset = 0; });
+  regEls.forEach((c, j) => setTimeout(() => { c.setAttribute('r', 4); if (c.animate) c.animate([{ transform: 'scale(0)' }, { transform: 'scale(1.4)' }, { transform: 'scale(1)' }], { duration: 320, easing: 'cubic-bezier(.34,1.56,.64,1)' }); }, 950 + j * 90));
+  countUp($('sledSmooth'), tr.smoothness, 1000);
+}
+function playRhythm() {
+  const path = $('sledSvg').querySelector('path.ln'); if (!path) return;
+  if (sledAnim) cancelAnimationFrame(sledAnim);
+  let ph = $('sledSvg').querySelector('.ph-dot');
+  if (!ph) { ph = svgEl('circle', { class: 'ph-dot reg', r: 5 }); $('sledSvg').appendChild(ph); }
+  const len = path.getTotalLength(), t0 = performance.now();
+  const run = now => { const k = Math.min(1, (now - t0) / 2200), pt = path.getPointAtLength(k * len); ph.setAttribute('cx', pt.x); ph.setAttribute('cy', pt.y); if (k < 1) sledAnim = requestAnimationFrame(run); else ph.remove(); };
+  sledAnim = requestAnimationFrame(run);
+}
+
 function finish() {
   pause();
   state.finished = true;
@@ -1022,16 +1166,12 @@ function finish() {
   const min = state.sessionMs / 60000;
   $('finS').textContent = min > 0.05 ? Math.round(state.sessionWords / min) : '—';
   if (state.tournament) { czkQuiz(state.tournament); return; }  // турнир: вместо финиша — квиз
-  const regCount = Object.keys(state.regs).length;
-  if (regCount > 0) {
-    $('finishReg').style.display = 'block';
-    $('finishReg').innerHTML = `Ты возвращался к <b>${regCount}</b> ${plural(regCount, 'месту', 'местам', 'местам')} — возможно, там было сложно.`;
-    $('finRegBtn').style.display = 'block';
-  } else {
-    $('finishReg').style.display = 'none';
-    $('finRegBtn').style.display = 'none';
-  }
-  $('finish').classList.add('open');
+  const tr = buildTrace();
+  $('finRegBtn').style.display = tr.regCount > 0 ? 'block' : 'none';
+  $('finishReg').style.display = 'none';
+  $('finish').classList.add('open');     // открыть ДО renderSled — getTotalLength работает на видимом SVG
+  renderSled(tr);
+  try { const traces = loadTraces(); traces.push({ ts: Date.now(), smoothness: tr.smoothness, words: state.sessionWords, regCount: tr.regCount }); localStorage.setItem('fr_traces', JSON.stringify(traces.slice(-40))); } catch (e) {}
 }
 function plural(n, one, few, many) { const m = n % 10, h = n % 100; return (m === 1 && h !== 11) ? one : (m >= 2 && m <= 4 && (h < 12 || h > 14)) ? few : many; }
 
@@ -1051,6 +1191,7 @@ function goTo(idx, snap = true) {
 function recordRegression(targetIdx) {
   const [s] = sentenceRange(targetIdx);
   state.regs[s] = (state.regs[s] || 0) + 1;
+  state.sessionRegs[s] = (state.sessionRegs[s] || 0) + 1;   // возврат этой попытки → для следа
   try { localStorage.setItem('fr_reg_' + docKey(), JSON.stringify(state.regs)); } catch (e) {}
   if (settings.trainer) {
     state.cleanMs = 0;
@@ -1156,7 +1297,7 @@ function openDoc(title, text, resumeIdx) {
   while (state.idx > 0 && tokens[state.idx].sep) state.idx--;
   state.maxIdx = state.idx;
   state.sessionWords = 0; state.sessionMs = 0; state.flushedW = 0; state.flushedMs = 0;
-  state.cleanMs = 0; state.finished = false;
+  state.cleanMs = 0; state.finished = false; state.paceSamples = []; state.sessionRegs = {};
   state.totalWords = tokens.filter(t => !t.sep).length;
   state.nonSepRatio = state.totalWords / tokens.length;
   state.regs = JSON.parse(localStorage.getItem('fr_reg_' + docKey()) || '{}');
@@ -1274,8 +1415,16 @@ $('dimPunctChk').onchange = e => { settings.dimPunct = e.target.checked; applySe
 
 /* ============ Финиш: события ============ */
 $('finHome').onclick = goHome;
-$('finRestart').onclick = () => { $('finish').classList.remove('open'); goTo(0, false); };
+$('finRestart').onclick = () => {
+  $('finish').classList.remove('open');
+  // свежая честная попытка: обнуляем метрики и возвраты сессии, встаём в начало (пауза)
+  state.idx = 0; while (state.idx < state.tokens.length - 1 && state.tokens[state.idx].sep) state.idx++;
+  state.maxIdx = state.idx; state.sessionWords = 0; state.sessionMs = 0; state.flushedW = 0; state.flushedMs = 0;
+  state.cleanMs = 0; state.finished = false; state.paceSamples = []; state.sessionRegs = {};
+  renderWord(); renderContext(); updateStats(); updateTimeLeft();
+};
 $('finRegBtn').onclick = () => { $('finish').classList.remove('open'); showRegList(); };
+$('sledPlay').onclick = playRhythm;
 $('regClose').onclick = () => $('regModal').classList.remove('open');
 $('regModal').onclick = e => { if (e.target === $('regModal')) $('regModal').classList.remove('open'); };
 
