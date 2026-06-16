@@ -83,7 +83,7 @@
   #reader { user-select: none; }
   .topbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: var(--muted); font-size: 14px; transition: opacity .35s; }
   .topbar .title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .topbar button { background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 6px; }
+  .topbar button { background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 6px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
   .topbar button:hover { color: var(--text); }
   #progressWrap { height: 14px; display: flex; align-items: center; cursor: pointer; transition: opacity .35s; }
   #progressTrack { height: 4px; width: 100%; background: var(--surface-2); border-radius: 2px; }
@@ -286,6 +286,11 @@
   .ob-card { background: var(--surface); border: 1px solid var(--guide); border-radius: var(--r-lg); padding: 16px; }
   .ob-lb-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: var(--r-sm); font-size: 14px; }
   .ob-lb-row.me { background: var(--surface-2); border: 1px solid var(--accent); }
+  /* a11y: уважаем prefers-reduced-motion — мгновенные смены без затуханий/скольжений.
+     !important перебивает и инлайновый transition словного fade (он без important) */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+  }
 </style>
 </head>
 <body>
