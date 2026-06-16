@@ -286,6 +286,13 @@
   .ob-card { background: var(--surface); border: 1px solid var(--guide); border-radius: var(--r-lg); padding: 16px; }
   .ob-lb-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: var(--r-sm); font-size: 14px; }
   .ob-lb-row.me { background: var(--surface-2); border: 1px solid var(--accent); }
+  /* серия/геймификация */
+  .ob-link { background: none; border: none; color: var(--accent); font-size: 13px; cursor: pointer; text-decoration: underline; padding: 4px; }
+  .ob-dots { display: flex; gap: 7px; justify-content: center; margin-top: 14px; }
+  .ob-dots i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--guide); }
+  .ob-dots i.on { background: var(--accent); border-color: var(--accent); }
+  .ob-ring { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: var(--accent); flex-shrink: 0; }
+  .ob-streak, .ob-launchhead { display: flex; align-items: center; gap: 12px; }
   /* a11y: уважаем prefers-reduced-motion — мгновенные смены без затуханий/скольжений.
      !important перебивает и инлайновый transition словного fade (он без important) */
   @media (prefers-reduced-motion: reduce) {
@@ -1082,6 +1089,17 @@ function showRegList() {
 
 /* ============ Статистика по дням ============ */
 function todayKey() { return new Date().toISOString().slice(0, 10); }
+const isoDay = d => d.toISOString().slice(0, 10);
+const plurDays = n => { const m = n % 100, l = n % 10; return n + ' ' + (m > 10 && m < 20 ? 'дней' : l === 1 ? 'день' : l > 1 && l < 5 ? 'дня' : 'дней'); };
+// серия = подряд идущие дни с чтением (из fr_days). Если сегодня ещё не читал — считаем со вчера.
+function deriveStreak() {
+  const days = JSON.parse(localStorage.getItem('fr_days') || '{}');
+  const d = new Date();
+  if (!(days[isoDay(d)] && days[isoDay(d)].ms > 0)) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (days[isoDay(d)] && days[isoDay(d)].ms > 0) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
 function flushDay() {
   const dw = state.sessionWords - state.flushedW;
   const dm = state.sessionMs - state.flushedMs;
@@ -1106,7 +1124,8 @@ function renderDays() {
   const t = days[todayKey()] || { w: 0, ms: 0 };
   const min = Math.round(t.ms / 60000);
   const eff = t.ms > 3000 ? Math.round(t.w / (t.ms / 60000)) : 0;
-  $('todayLine').innerHTML = `Сегодня: <b>${t.w}</b> слов · ${min} мин` + (eff ? ` · факт ${eff} сл/мин` : '');
+  const streak = deriveStreak();
+  $('todayLine').innerHTML = (streak > 0 ? `🔥 Серия: <b>${plurDays(streak)}</b> · ` : '') + `Сегодня: <b>${t.w}</b> слов · ${min} мин` + (eff ? ` · факт ${eff} сл/мин` : '');
   const max = Math.max(...vals, 1);
   const names = ['вс','пн','вт','ср','чт','пт','сб'];
   $('daysBars').innerHTML = keys.map((k, i) => {
@@ -1304,6 +1323,15 @@ async function initSamples() {
     $('samplesRow').style.display = 'flex';
   } catch (e) { /* открыт как file:// или примеров нет — просто прячем блок */ }
 }
+async function openSample(file, title) {
+  try {
+    const r = await fetch('sample-books/' + file, { cache: 'no-cache' });
+    if (!r.ok) throw new Error('не удалось загрузить текст');
+    const text = await r.text();
+    const probe = tokenize(text).length;
+    openDoc(title, text, +(localStorage.getItem('fr_pos_' + title + '_' + probe) || 0));
+  } catch (err) { alert('Ошибка: ' + err.message); }
+}
 
 /* ============ Турнир «Чехов-Кубок» ============ */
 // ВЕСЬ UX турнира — в приложении. Контент дня — статикой (tournament/manifest.json),
@@ -1461,7 +1489,8 @@ czkLoad();
 /* ============ Онбординг: 7-шаговая воронка (дизайн-система) ============ */
 // Duolingo-логика в тёмном скине: ценность сразу → обучение → персонализация →
 // первая победа + имя → цель → турнир. Реальный ORP-ретикл, без выдуманных коллег.
-const OB_STEPS = ['welcome', 'how', 'why', 'test', 'result', 'goal', 'tournament'];
+const OB_STEPS = ['welcome', 'how', 'why', 'test', 'result', 'goal', 'launch'];
+const OB_START = { file: '06-chekhov-smert-chinovnika.txt', title: 'Смерть чиновника', author: 'А. П. Чехов', meta: '~2 мин · классика для разгона' };
 const OB_DEMO = 'Глаза не двигаются — слово появляется в одной точке';
 const OB_TEST = 'Чтение по одному слову освобождает глаза от движения по строке и поднимает скорость без потери смысла';
 // классическая поэзия для welcome — стримится по словам; всё public domain
@@ -1556,6 +1585,18 @@ function obTrail() {
   return '<div class="ob-trail"><button class="ob-back" id="obBack" aria-label="Назад"' + (ob.step <= 1 ? ' style="visibility:hidden"' : '') + '>←</button><div class="ob-seg">' + segs + '</div></div>';
 }
 function obEnd() { clearTimeout(obTimer); localStorage.setItem('czk_onboarded', '1'); $('onboard').classList.remove('open'); }
+// тест: показать результат прямо на экране замера + «перемерить» (без авто-перехода)
+function obTestResult() {
+  const r = ob.result || { words: 16, secs: 5, wpm: 300 };
+  $('obBody').innerHTML = '<div class="ob-h1">Проверим твой темп</div><p class="ob-lead">Прочитай отрывок целиком. Засекаем, сколько слов в минуту у тебя выходит прямо сейчас.</p>'
+    + '<div class="ob-fill ob-center" style="gap:6px"><div class="ob-big">' + r.wpm + '</div><div class="ob-lead">слов в минуту</div>'
+    + '<div class="ob-badge" style="margin-top:10px">' + r.words + ' слов · ' + r.secs + ' с — честный замер</div>'
+    + '<button class="ob-link" id="obRetry">перемерить</button></div>'
+    + '<button class="btn primary obcta" id="obc">Дальше →</button>';
+  $('obc').onclick = () => obGo('result');
+  $('obRetry').onclick = () => obGo('test');
+}
+const obDots = n => '<div class="ob-dots">' + Array.from({ length: 7 }, (_, i) => '<i class="' + (i < n ? 'on' : '') + '"></i>').join('') + '</div><div class="ob-lead" style="text-align:center;margin-top:8px">День ' + n + ' из серии — держи цепочку</div>';
 function obGo(name) { ob.step = OB_STEPS.indexOf(name); obRender(); }
 function obShow(force) {
   if (!force && (localStorage.getItem('czk_onboarded') || localStorage.getItem('fr_last'))) return;
@@ -1595,56 +1636,43 @@ function obRender() {
       obRsvp(test, 300, false, obSetWord, () => {
         const secs = (performance.now() - started) / 1000;
         ob.result = { words: test.length, secs: Math.max(1, Math.round(secs)), wpm: Math.round(test.length / (secs / 60)) };
-        setTimeout(() => obGo('result'), 450);
+        setTimeout(obTestResult, 350);
       });
     };
 
   } else if (s === 'result') {
     const r = ob.result || { words: 16, secs: 5, wpm: 300 };
+    const dn = deriveStreak() || 1;
     b.innerHTML = '<div class="ob-fill" style="justify-content:center;gap:20px">'
       + '<div><div class="ob-big">' + r.wpm + '</div><div class="ob-lead" style="text-align:center">слов в минуту 🎉</div></div>'
       + '<p class="ob-lead" style="text-align:center">Средний читатель — около <b style="color:var(--text)">200 сл/мин</b>. Ты уже быстрее. Через неделю тренировок — <b style="color:var(--text)">450+</b>.</p>'
       + '<div class="ob-statcard"><div class="ob-stat"><b>' + r.words + '</b><small>слов</small></div><div class="ob-stat"><b>' + r.secs + ' с</b><small>время</small></div><div class="ob-stat"><b class="acc">' + r.wpm + '</b><small>факт, сл/мин</small></div></div>'
+      + '<div class="ob-card ob-streak"><div class="ob-ring">' + dn + '</div><div><b>Засчитано как День ' + dn + '</b><div class="ob-lead" style="margin-top:2px">Возвращайся завтра — серия растёт.</div></div></div>'
       + '<div><div style="font-size:14px;margin-bottom:8px">Закрепим результат за тобой:</div><input class="ob-name" id="obn" maxlength="24" placeholder="Как тебя зовут?"></div>'
-      + '</div><button class="btn primary obcta" id="obc">Дальше</button>';
+      + '</div><button class="btn primary obcta" id="obc">Хочу читать так же</button>';
     const inp = $('obn'); inp.value = ob.name; inp.oninput = () => ob.name = inp.value;
     $('obc').onclick = () => obGo('goal');
 
   } else if (s === 'goal') {
     const gc = OB_GOALS.map(([id, m, tag, rec]) => '<button class="ob-pick' + (ob.goal === id ? ' sel' : '') + '" data-g="' + id + '"><span class="tt"><b>' + m + '</b><small>' + tag + '</small></span>' + (rec ? '<span class="ob-bdg">рекомендуем</span>' : '') + '<span class="ob-radio"></span></button>').join('');
-    b.innerHTML = '<div class="ob-h1">Сколько минут в день?</div><p class="ob-lead">Маленькая цель, которую легко держать. Менять можно когда угодно.</p><div class="ob-list ob-fill">' + gc + '</div><button class="btn primary obcta" id="obc">Поставить цель</button><button class="ob-skip" id="obs">Пропустить — поставлю позже</button>';
+    b.innerHTML = '<div class="ob-h1">Сколько минут в день?</div><p class="ob-lead">Маленькая цель, которую легко держать. Менять можно когда угодно.</p><div class="ob-list ob-fill">' + gc + '</div>' + obDots(deriveStreak() || 1) + '<button class="btn primary obcta" id="obc">Поставить цель</button><button class="ob-skip" id="obs">Пропустить — поставлю позже</button>';
     localStorage.setItem('czk_goal', ob.goal); track('commit');
     b.querySelectorAll('.ob-pick').forEach(p => p.onclick = () => { ob.goal = +p.dataset.g; localStorage.setItem('czk_goal', ob.goal); b.querySelectorAll('.ob-pick').forEach(x => x.classList.remove('sel')); p.classList.add('sel'); });
-    $('obc').onclick = () => obGo('tournament'); $('obs').onclick = () => obGo('tournament');
+    $('obc').onclick = () => obGo('launch'); $('obs').onclick = () => obGo('launch');
 
-  } else if (s === 'tournament') {
+  } else if (s === 'launch') {
     const nm = ob.name.trim() || 'Ты';
-    b.innerHTML = '<div class="ob-fill" style="gap:16px">'
-      + '<div style="text-align:center;margin-top:6px"><div class="ob-h1" style="margin:0">Готово, ' + escapeHtml(nm) + '! 🎉</div><div class="ob-lead" style="margin-top:8px">Цель: ' + ob.goal + ' мин в день. День 1 начат — держи серию.</div></div>'
-      + '<div class="ob-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:600"><span>🏆</span> Турнир дня · команда</div><div id="obLb"><div class="ob-lead">Загрузка лидерборда…</div></div></div>'
-      + '<div class="ob-card" id="obEt"><span class="ob-badge">Эталон дня</span><div class="ob-lead" style="margin-top:8px">Загрузка…</div></div>'
-      + '</div><button class="btn primary obcta" id="obc">В турнир →</button><button class="ob-skip" id="obs">Позже — на главную</button>';
-    $('obc').onclick = async () => { const n = ob.name.trim(); if (n) await LB.signIn(n); obEnd(); openTournament(); };
-    $('obs').onclick = obEnd;
-    // реальный отрывок дня + реальный лидерборд из Supabase
-    (async () => {
-      await czkLoad(); const day = czkToday(CZK);
-      if (s === OB_STEPS[ob.step] && $('obEt')) $('obEt').innerHTML = '<span class="ob-badge">Эталон дня</span>'
-        + (day ? '<div style="font-size:15px;line-height:1.5;margin-top:8px">' + escapeHtml(day.title) + (day.author ? ' · ' + escapeHtml(day.author) : '') + '</div><div class="ob-lead" style="margin-top:6px">Прочитай + 2 вопроса · обгони эталон (11 очков)</div>'
-                : '<div class="ob-lead" style="margin-top:8px">Отрывок дня скоро появится.</div>');
-      let rows = [];
-      try {
-        const all = await LB.scores(); const dk = todayISO(); const today = all.filter(x => x.day === dk);
-        const full = today.filter(x => x.base >= 10).sort((a, b) => b.effWpm - a.effWpm);
-        const bonus = {}; full.forEach((x, i) => bonus[x.name] = i === 0 ? 3 : i === 1 ? 2 : i === 2 ? 1 : 0);
-        rows = today.map(x => ({ name: x.name, pts: x.base + (bonus[x.name] || 0) }));
-      } catch (e) {}
-      rows.push({ name: 'Эталон дня', pts: 11, ghost: true });
-      rows.sort((a, b) => b.pts - a.pts);
-      if (s !== OB_STEPS[ob.step] || !$('obLb')) return;
-      $('obLb').innerHTML = rows.slice(0, 6).map((r, i) => '<div class="ob-lb-row"><span style="color:var(--muted);width:22px;text-align:center">' + (r.ghost ? '📖' : (i + 1)) + '</span><span style="flex:1' + (r.ghost ? ';color:var(--muted)' : '') + '">' + escapeHtml(r.name) + '</span><span style="color:var(--muted)">' + r.pts + '</span></div>').join('')
-        + '<div class="ob-lb-row me"><span style="width:22px;text-align:center">→</span><span style="flex:1">' + escapeHtml(nm) + ' · ты</span><span style="color:var(--accent);font-weight:600">сыграй</span></div>';
-    })();
+    const dn = deriveStreak() || 1;
+    b.innerHTML = '<div class="ob-fill" style="gap:14px">'
+      + '<div class="ob-launchhead"><div class="ob-ring">' + dn + '</div><div style="flex:1"><b>День ' + dn + '</b><div class="ob-lead">серия</div></div><div style="text-align:right"><b>0/' + ob.goal + ' мин</b><div class="ob-lead">цель на сегодня</div></div></div>'
+      + '<div><div class="ob-h1" style="margin:0">Готов к первому тексту, ' + escapeHtml(nm) + '?</div><div class="ob-lead" style="margin-top:6px">Подобрали под твою цель. Пара минут — и серия закреплена.</div></div>'
+      + '<div class="ob-card"><span class="ob-badge">твой первый текст готов</span><div style="margin-top:10px"><div style="font-weight:600;font-size:15px">' + escapeHtml(OB_START.title) + '</div><div class="ob-lead">' + escapeHtml(OB_START.author) + '</div><div class="ob-lead" style="margin-top:6px">' + OB_START.meta + '</div></div><button class="btn primary obcta" id="obStart" style="margin-top:12px">Читать ▶</button></div>'
+      + '<button class="ob-card" id="obTourn" style="text-align:left;cursor:pointer;width:100%;color:var(--text)"><div style="font-weight:600;margin-bottom:4px">🏆 Турнир дня</div><div class="ob-lead">Отрывок + 2 вопроса — и ты в лидерборде. +1 к серии за участие.</div></button>'
+      + '</div><button class="ob-skip" id="obOwn">+ Свой текст · файл .fb2 / txt</button>';
+    const sign = async () => { const n = ob.name.trim(); if (n) await LB.signIn(n); };
+    $('obStart').onclick = async () => { await sign(); obEnd(); openSample(OB_START.file, OB_START.title); };
+    $('obTourn').onclick = async () => { await sign(); obEnd(); openTournament(); };
+    $('obOwn').onclick = async () => { await sign(); obEnd(); const pa = $('pasteArea'); if (pa) pa.focus(); };
   }
 }
 
