@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Чехов · режимы показа стихов (лаборатория)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
+  :root {
+    --bg:#16161a; --surface:#1f1f26; --surface-2:#2a2a33; --surface-3:#34343f;
+    --text:#e8e6e1; --muted:#8a8894; --guide:#3a3a44; --accent:#ff5a4e; --accent-hov:#ff6f64;
+    --font:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font); -webkit-font-smoothing:antialiased; min-height:100vh; display:flex; flex-direction:column; }
+  .bar { display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--guide); }
+  .grp { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .grp label { font-size:12px; color:var(--muted); margin-right:2px; }
+  button, select { font-family:inherit; font-size:13px; color:var(--text); background:var(--surface-2); border:1px solid var(--guide); border-radius:8px; padding:7px 12px; cursor:pointer; transition:border-color .15s,color .15s; }
+  button:hover, select:hover { border-color:var(--muted); }
+  button.on { border-color:var(--accent); color:var(--accent); }
+  button.play { background:var(--accent); color:#16161a; border-color:var(--accent); font-weight:600; min-width:40px; }
+  input[type=range] { accent-color:var(--accent); width:120px; }
+  #wpmv { font-size:12px; color:var(--muted); width:28px; }
+  #pasteWrap { display:none; padding:10px 16px; border-bottom:1px solid var(--guide); }
+  textarea { width:100%; background:var(--surface); color:var(--text); border:1px solid var(--guide); border-radius:8px; padding:10px 12px; font-family:inherit; font-size:14px; resize:vertical; outline:none; }
+  textarea:focus { border-color:var(--muted); }
+  .stage { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px; position:relative; overflow:hidden; text-align:center; min-height:58vh; }
+  .desc { position:absolute; top:14px; left:0; right:0; text-align:center; color:var(--muted); font-size:12px; padding:0 16px; }
+  .ring-badge { position:absolute; top:14px; right:16px; color:var(--accent); font-size:14px; opacity:.7; display:none; }
+  /* reticle (word modes) */
+  .ret { display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .tick { width:7px; height:2px; border-radius:2px; background:var(--accent); opacity:.55; transition:opacity .12s ease, transform .12s ease; }
+  .tick.beat { opacity:.95; transform:scaleX(1.6); }
+  .wr { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:baseline; width:min(86vw,560px); font-weight:500; letter-spacing:.01em; font-size:50px; transition:transform .14s ease; }
+  .wr.beat { transform:scale(1.05); }
+  .wr .pre { text-align:right; white-space:pre; }
+  .wr .orp { color:var(--accent); text-align:center; white-space:pre; }
+  .wr .post { text-align:left; white-space:pre; }
+  /* line / build modes */
+  .line { font-size:34px; font-weight:500; line-height:1.45; max-width:min(90vw,640px); }
+  @keyframes lineIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+  .line.in { animation:lineIn .28s ease; }
+  .line.out { opacity:0; transition:opacity .25s ease; }
+  .bw { opacity:0; transition:opacity .14s ease; }
+  .bw.show { opacity:1; }
+  .bw .a { color:var(--accent); }
+  /* stanza glow (whole poem) */
+  .poem { font-size:23px; line-height:1.75; max-width:min(90vw,640px); white-space:pre-wrap; text-align:center; }
+  .poem .w { color:var(--muted); transition:color .2s ease, opacity .4s ease; }
+  .poem .w.cur { color:var(--accent); }
+  .poem .w.cur .a { color:var(--accent); }
+  .poem .w.done { color:var(--text); opacity:.42; }
+  .poem .w .a { color:var(--muted); }
+  /* corridor — слова летят навстречу из глубины, якорь стоит в точке схода */
+  .corr { position:relative; width:100%; height:64vh; perspective:760px; perspective-origin:50% 50%; display:flex; align-items:center; justify-content:center; }
+  .cword { position:absolute; display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:baseline; width:min(72vw,440px); font-size:42px; font-weight:500; letter-spacing:.01em; text-align:center; will-change:transform,opacity,filter; }
+  .cword .pre { text-align:right; white-space:pre; }
+  .cword .orp { color:var(--accent); text-align:center; white-space:pre; }
+  .cword .post { text-align:left; white-space:pre; }
+  @keyframes fly {
+    0%   { transform:translateZ(-1500px); opacity:0; filter:blur(6px); }
+    18%  { opacity:.7; }
+    48%  { transform:translateZ(-30px); opacity:1; filter:blur(0); }
+    62%  { transform:translateZ(60px); opacity:1; filter:blur(0); }
+    100% { transform:translateZ(600px); opacity:0; filter:blur(4px); }
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="grp" id="modes"></div>
+  <div class="grp"><label>стих</label><select id="poemSel"></select></div>
+  <div class="grp"><label>сл/мин</label><input type="range" id="wpm" min="120" max="480" step="10" value="240"><span id="wpmv">240</span></div>
+  <div class="grp"><button id="play" class="play">▶</button><button id="restart" title="сначала">⟲</button><button id="pasteBtn">свой текст</button></div>
+</div>
+<div id="pasteWrap">
+  <textarea id="pasteText" rows="6" placeholder="Вставь стих — одна строка стиха = одна строка текста. Пустая строка = граница строфы."></textarea>
+  <button id="useText" style="margin-top:8px">Показать этот текст</button>
+</div>
+<div class="stage">
+  <div class="desc" id="desc"></div>
+  <div class="ring-badge" id="ringBadge">↺ кольцо</div>
+  <div id="view"></div>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+
+/* ---------- данные: public-domain стихи ---------- */
+const POEMS = {
+  'Блок — Ночь, улица…': ['Ночь, улица, фонарь, аптека,', 'Бессмысленный и тусклый свет.', 'Живи ещё хоть четверть века —', 'Всё будет так. Исхода нет.', 'Умрёшь — начнёшь опять сначала,', 'И повторится всё, как встарь:', 'Ночь, ледяная рябь канала,', 'Аптека, улица, фонарь.'],
+  'Лермонтов — Парус': ['Белеет парус одинокий', 'В тумане моря голубом!..', 'Что ищет он в стране далёкой?', 'Что кинул он в краю родном?', 'Играют волны — ветер свищет,', 'И мачта гнётся и скрипит...', 'Увы! он счастия не ищет', 'И не от счастия бежит!'],
+  'Есенин — Отговорила роща': ['Отговорила роща золотая', 'Берёзовым, весёлым языком,', 'И журавли, печально пролетая,', 'Уж не жалеют больше ни о ком.'],
+  'Тютчев — Silentium!': ['Молчи, скрывайся и таи', 'И чувства и мечты свои —', 'Пускай в душевной глубине', 'Встают и заходят оне', 'Безмолвно, как звезды в ночи, —', 'Любуйся ими — и молчи.'],
+};
+
+/* ---------- режимы ---------- */
+const MODES = [
+  ['rsvp', 'Плоский RSVP', 'Базовый: слово за словом в одной точке. Быстро, но плющит ритм и строку.'],
+  ['line', 'Дыхание строки', 'Единица — строка. Появляется целиком, держится по метру, выдох между строфами.'],
+  ['meter', 'Пульс метра', 'Пословно, но слово и «прицел» пульсируют в такт ямбу — ритм чувствуешь телом.'],
+  ['build', 'Сборка строки', 'Слова добавляются и остаются — строка собирается на глазах, затем растворяется.'],
+  ['ring', 'Кольцо', 'Как «дыхание строки», но в конце финальная строка отматывается назад и стих замыкается.'],
+  ['glow', 'Бегущий огонёк', 'Вся строфа на экране тускло, яркая «голова» скользит по словам. Видна форма стиха.'],
+  ['corridor', 'Коридор', 'Слова летят навстречу из глубины, красная буква стоит в точке схода — глаз не двигается, как в RSVP.'],
+];
+
+let mode = 'line', wpm = 240, playing = false, T = null;
+const view = () => $('view');
+
+/* ---------- ORP (пиксельный якорь, как в апе) ---------- */
+const _mc = document.createElement('canvas').getContext('2d');
+const isL = c => /[\p{L}\p{N}]/u.test(c);
+function orp(word, font) {
+  const ch = [...word]; if (!ch.length) return 0;
+  if (!ch.some(isL)) return Math.floor(ch.length / 2);
+  _mc.font = font; const ws = ch.map(c => _mc.measureText(c).width);
+  let a = 0, b = ch.length - 1; while (a < b && !isL(ch[a])) a++; while (b > a && !isL(ch[b])) b--;
+  let x0 = 0; for (let i = 0; i < a; i++) x0 += ws[i]; let x1 = x0; for (let i = a; i <= b; i++) x1 += ws[i];
+  const t = x0 + (x1 - x0) * 0.30; let best = a, bd = 1e9, x = 0;
+  for (let i = 0; i < ch.length; i++) { if (i >= a && i <= b && isL(ch[i])) { const d = Math.abs(x + ws[i] / 2 - t); if (d < bd) { bd = d; best = i; } } x += ws[i]; }
+  return best;
+}
+/* гигиена тактов: одиночную пунктуацию и однобуквенные слова клеим к соседу */
+function toks(line) {
+  const raw = line.split(/\s+/).filter(Boolean), m = [];
+  raw.forEach(t => { if (!/[\p{L}\p{N}]/u.test(t) && m.length) m[m.length - 1] += ' ' + t; else m.push(t); });
+  const out = [];
+  for (let k = 0; k < m.length; k++) {
+    const bare = m[k].replace(/[^\p{L}\p{N}]/gu, '');
+    if (bare.length === 1 && k < m.length - 1) m[k + 1] = m[k] + ' ' + m[k + 1];
+    else if (bare.length === 1 && out.length) out[out.length - 1] += ' ' + m[k];
+    else out.push(m[k]);
+  }
+  return out;
+}
+function curLines() {
+  const t = $('pasteText').value.trim();
+  if (window._useCustom && t) return t.split('\n').map(s => s.trim());
+  return POEMS[$('poemSel').value];
+}
+function pace(tok) {
+  let m = 1; const w = tok.w;
+  if (/[.!?…]$/.test(w)) m += 1.3; else if (/[,;:—]$/.test(w)) m += 0.5;
+  if (w.replace(/[^\p{L}\p{N}]/gu, '').length >= 10) m += 0.3;
+  if (tok.lineEnd) m += 0.8; if (tok.stanzaEnd) m += 1.4;
+  return m;
+}
+function flatWords() {
+  const ls = curLines(); const seq = [];
+  ls.forEach((line, li) => { if (!line) return; const ts = toks(line); ts.forEach((w, wi) => seq.push({ w, lineEnd: wi === ts.length - 1, stanzaEnd: wi === ts.length - 1 && (li + 1) % 4 === 0 })); });
+  return seq;
+}
+
+/* ---------- ретикл ---------- */
+function reticle() { view().innerHTML = '<div class="ret"><div class="tick"></div><div class="wr"><span class="pre"></span><span class="orp"></span><span class="post"></span></div><div class="tick"></div></div>'; }
+function fit(words) {
+  const wr = view().querySelector('.wr'); if (!wr) return;
+  const maxW = (wr.clientWidth || 400) * 0.94, fam = getComputedStyle(wr).fontFamily;
+  let size = 50; _mc.font = '500 50px ' + fam;
+  words.forEach(w => { const ww = _mc.measureText(w).width; if (ww > maxW) size = Math.min(size, Math.max(28, Math.floor(50 * maxW / ww))); });
+  wr.style.fontSize = size + 'px';
+}
+function setWord(word) {
+  const wr = view().querySelector('.wr'); if (!wr) return;
+  const ch = [...word]; const ci = orp(word, '500 ' + parseFloat(getComputedStyle(wr).fontSize) + 'px ' + getComputedStyle(wr).fontFamily);
+  wr.children[0].textContent = ch.slice(0, ci).join(''); wr.children[1].textContent = ch[ci] || ''; wr.children[2].textContent = ch.slice(ci + 1).join('');
+}
+function pulse() {
+  const wr = view().querySelector('.wr'), ts = view().querySelectorAll('.tick'); if (!wr) return;
+  wr.classList.add('beat'); ts.forEach(t => t.classList.add('beat'));
+  setTimeout(() => { wr.classList.remove('beat'); ts.forEach(t => t.classList.remove('beat')); }, 130);
+}
+
+/* ---------- раннеры ---------- */
+function runWords(meter) {
+  const seq = flatWords(); if (!seq.length) return; reticle(); fit(seq.map(t => t.w));
+  let i = 0;
+  const go = () => {
+    if (i >= seq.length) { T = setTimeout(() => { i = 0; go(); }, 1300); return; }
+    const tok = seq[i]; setWord(tok.w); if (meter) pulse();
+    let mul = pace(tok); if (meter) mul *= (i % 2 ? 0.9 : 1.12);
+    i++; T = setTimeout(go, (60000 / wpm) * mul);
+  };
+  go();
+}
+function showLineEl(text, cls) {
+  view().innerHTML = '<div class="line ' + (cls || 'in') + '">' + text.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</div>';
+}
+function runLines(ring) {
+  const ls = curLines().filter(l => l !== undefined); if (!ls.length) return;
+  $('ringBadge').style.display = ring ? 'block' : 'none';
+  let i = 0;
+  const go = () => {
+    if (i >= ls.length) {
+      if (ring) { mirror(ls[ls.length - 1] || ls[0], () => { i = 0; go(); }); return; }
+      T = setTimeout(() => { i = 0; go(); }, 1100); return;
+    }
+    const line = ls[i];
+    if (!line) { i++; T = setTimeout(go, (60000 / wpm) * 1.6); return; } // пустая = пауза-строфа
+    showLineEl(line);
+    const wc = toks(line).length, hold = (60000 / wpm) * Math.max(3, wc) * 0.85 + 280;
+    const stanza = (i + 1) % 4 === 0;
+    i++;
+    T = setTimeout(() => { const el = view().querySelector('.line'); if (el) el.classList.add('out'); T = setTimeout(go, 220 + (stanza ? 600 : 0)); }, hold);
+  };
+  go();
+}
+function mirror(line, done) {
+  // финальная строка «отматывается» — подсветка бежит справа налево, затем замыкаемся
+  const ws = toks(line);
+  view().innerHTML = '<div class="line">' + ws.map((w, k) => '<span data-k="' + k + '" style="transition:color .2s">' + w.replace(/</g, '&lt;') + '</span>').join(' ') + '</div>';
+  const spans = [...view().querySelectorAll('span')];
+  let k = spans.length - 1;
+  const sweep = () => {
+    if (k < 0) { T = setTimeout(done, 500); return; }
+    spans.forEach(s => s.style.color = 'var(--muted)'); spans[k].style.color = 'var(--accent)';
+    k--; T = setTimeout(sweep, 140);
+  };
+  sweep();
+}
+function runBuild() {
+  const ls = curLines().filter(Boolean); if (!ls.length) return;
+  let li = 0;
+  const goLine = () => {
+    const ws = toks(ls[li]); view().innerHTML = '<div class="line" id="bl"></div>';
+    const host = $('bl'); let wi = 0;
+    const addWord = () => {
+      if (wi >= ws.length) { T = setTimeout(() => { const el = $('bl'); if (el) el.classList.add('out'); T = setTimeout(() => { li = (li + 1) % ls.length; goLine(); }, 260); }, (60000 / wpm) * 2.2 + 300); return; }
+      const sp = document.createElement('span'); sp.className = 'bw'; sp.textContent = (wi ? ' ' : '') + ws[wi]; host.appendChild(sp);
+      requestAnimationFrame(() => sp.classList.add('show'));
+      wi++; T = setTimeout(addWord, (60000 / wpm) * 0.9);
+    };
+    addWord();
+  };
+  goLine();
+}
+function runGlow() {
+  const ls = curLines(); const html = ls.map(line => line ? toks(line).map(w => '<span class="w">' + w.replace(/</g, '&lt;') + '</span>').join(' ') : '').join('\n');
+  view().innerHTML = '<div class="poem">' + html + '</div>';
+  const spans = [...view().querySelectorAll('.w')]; if (!spans.length) return;
+  let i = 0;
+  const go = () => {
+    if (i >= spans.length) { T = setTimeout(() => { spans.forEach(s => s.className = 'w'); i = 0; go(); }, 1400); return; }
+    spans.forEach((s, k) => { s.classList.remove('cur'); if (k < i) s.classList.add('done'); });
+    spans[i].classList.add('cur'); spans[i].classList.remove('done');
+    const w = spans[i].textContent; let mul = 1; if (/[.!?…]$/.test(w)) mul += 1.3; else if (/[,;:—]$/.test(w)) mul += 0.5;
+    i++; T = setTimeout(go, (60000 / wpm) * mul);
+  };
+  go();
+}
+function flyWord(host, word) {
+  const el = document.createElement('div'); el.className = 'cword';
+  const ci = orp(word, '500 42px ' + getComputedStyle(host).fontFamily), ch = [...word];
+  el.innerHTML = '<span class="pre"></span><span class="orp"></span><span class="post"></span>';
+  el.children[0].textContent = ch.slice(0, ci).join(''); el.children[1].textContent = ch[ci] || ''; el.children[2].textContent = ch.slice(ci + 1).join('');
+  return el; // ponytail: длинные слова при 42px могут вылезти за 440px — не фитим, редкий случай
+}
+function runCorridor() {
+  const seq = flatWords(); if (!seq.length) return;
+  view().innerHTML = '<div class="corr" id="corr"></div>';
+  const corr = $('corr'); let i = 0;
+  const go = () => {
+    if (i >= seq.length) { T = setTimeout(() => { i = 0; go(); }, 1100); return; }
+    const tok = seq[i]; const interval = (60000 / wpm) * pace(tok);
+    const el = flyWord(corr, tok.w);
+    el.addEventListener('animationend', () => el.remove()); // несколько слов в полёте на разной глубине = коридор
+    corr.appendChild(el); el.style.animation = 'fly ' + Math.round(interval * 2.4) + 'ms ease-in forwards';
+    i++; T = setTimeout(go, interval);
+  };
+  go();
+}
+
+/* ---------- управление ---------- */
+function stop() { clearTimeout(T); T = null; }
+function start() {
+  stop(); playing = true; $('play').textContent = '⏸'; $('ringBadge').style.display = 'none';
+  if (mode === 'rsvp') runWords(false);
+  else if (mode === 'meter') runWords(true);
+  else if (mode === 'line') runLines(false);
+  else if (mode === 'ring') runLines(true);
+  else if (mode === 'build') runBuild();
+  else if (mode === 'glow') runGlow();
+  else if (mode === 'corridor') runCorridor();
+}
+function pause() { stop(); playing = false; $('play').textContent = '▶'; }
+function restart() { const wasPlaying = playing; pause(); if (wasPlaying) start(); else start(); }
+
+/* ---------- UI ---------- */
+MODES.forEach(([id, name]) => { const b = document.createElement('button'); b.textContent = name; b.dataset.m = id; if (id === mode) b.classList.add('on'); b.onclick = () => { mode = id; document.querySelectorAll('#modes button').forEach(x => x.classList.toggle('on', x.dataset.m === id)); $('desc').textContent = MODES.find(m => m[0] === id)[2]; start(); }; $('modes').appendChild(b); });
+Object.keys(POEMS).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = k; $('poemSel').appendChild(o); });
+$('poemSel').onchange = () => { window._useCustom = false; start(); };
+$('wpm').oninput = e => { wpm = +e.target.value; $('wpmv').textContent = wpm; if (playing) start(); };
+$('play').onclick = () => playing ? pause() : start();
+$('restart').onclick = restart;
+$('pasteBtn').onclick = () => { $('pasteWrap').style.display = $('pasteWrap').style.display === 'block' ? 'none' : 'block'; };
+$('useText').onclick = () => { window._useCustom = true; start(); };
+$('desc').textContent = MODES.find(m => m[0] === mode)[2];
+start();
+</script>
+</body>
+</html>
