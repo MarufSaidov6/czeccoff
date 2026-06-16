@@ -46,4 +46,38 @@ test.describe('След — экран завершения сессии', () =>
     await expect(page.locator('#sledSvg circle.reg')).not.toHaveCount(0);
     await expect(page.locator('#sledInsightT')).not.toHaveText('Ни одного возврата');
   });
+
+  test('стили следа: волна (заливка+линия) и сейсмо (бары без линии)', async ({ page }) => {
+    await skipOnboarding(page);
+    await page.goto('/');
+    await openPasted(page, TXT);
+    await page.click('#playBtn');
+    await page.waitForFunction(() => typeof state !== 'undefined' && state.paceSamples.length >= 6, null, { timeout: 8000 });
+    await page.evaluate(() => { settings.sledStyle = 'wave'; finish(); });
+    await expect(page.locator('#sledSvg .wavefill')).toHaveCount(1);
+    await expect(page.locator('#sledSvg path.ln')).toHaveCount(1);
+
+    await page.click('#finRestart');
+    await page.click('#playBtn');
+    await page.waitForFunction(() => typeof state !== 'undefined' && state.paceSamples.length >= 6, null, { timeout: 8000 });
+    await page.evaluate(() => { settings.sledStyle = 'seismo'; finish(); });
+    await expect(page.locator('#sledSvg line.bar')).not.toHaveCount(0);
+    await expect(page.locator('#sledSvg path.ln')).toHaveCount(0);
+  });
+
+  test('шаринг следа собирает PNG (canvas → blob)', async ({ page }) => {
+    await skipOnboarding(page);
+    await page.goto('/');
+    await openPasted(page, TXT);
+    await page.click('#playBtn');
+    await page.waitForFunction(() => typeof state !== 'undefined' && state.paceSamples.length >= 6, null, { timeout: 8000 });
+    await page.evaluate(() => finish());
+    const size = await page.evaluate(() => new Promise(res => {
+      const real = HTMLCanvasElement.prototype.toBlob;
+      HTMLCanvasElement.prototype.toBlob = function (cb, t) { return real.call(this, b => { HTMLCanvasElement.prototype.toBlob = real; res(b ? b.size : 0); cb(b); }, t); };
+      shareSled();
+      setTimeout(() => res(-1), 3000);
+    }));
+    expect(size).toBeGreaterThan(1000);
+  });
 });

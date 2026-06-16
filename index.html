@@ -206,6 +206,8 @@
   #sledSvg { display: block; width: 100%; height: 150px; }
   .sled-hero .ln { fill: none; stroke: var(--text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .sled-hero .reg { fill: var(--accent); }
+  .sled-hero .bar { stroke: var(--text); stroke-width: 3; stroke-linecap: round; }
+  .sled-hero .wavefill { fill: var(--accent); opacity: .12; }
   .sled-legend { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-top: 8px; }
   .sled-legend .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; }
   .sled-play { position: absolute; right: 14px; bottom: 30px; background: var(--surface); border: 1px solid var(--guide); color: var(--muted); border-radius: 9px; padding: 6px 12px; font-size: 12px; font-family: inherit; cursor: pointer; }
@@ -505,6 +507,14 @@
         <option value="fade">Плавная</option>
       </select>
     </div>
+    <div class="set">
+      <div><div class="l">Стиль следа</div><div class="d">Как рисуется ритм на экране завершения сессии</div></div>
+      <select id="sledStyleSel">
+        <option value="line">Линия</option>
+        <option value="wave">Волна</option>
+        <option value="seismo">Сейсмо</option>
+      </select>
+    </div>
     <div class="tp-row">
       <span class="tp-lbl">как меняются слова →</span>
       <span id="tpWord" class="tp-word">слово</span>
@@ -541,6 +551,7 @@
     <div class="sled-hero">
       <svg id="sledSvg" viewBox="0 0 322 150" preserveAspectRatio="none" aria-hidden="true"></svg>
       <div class="sled-legend"><span class="dot"></span> красный — где ты возвращался</div>
+      <button class="sled-play" id="sledShare" style="right:88px">↗ PNG</button>
       <button class="sled-play" id="sledPlay">▶ ритм</button>
     </div>
     <div class="sled-row">
@@ -575,7 +586,7 @@
 'use strict';
 
 /* ============ Настройки ============ */
-const defaults = { size: 100, font: 'sans', dlg: 'merge', sep: true, smart: true, trainer: false, trans: 'gap', orp: 'classic', hud: true, dimPunct: true };
+const defaults = { size: 100, font: 'sans', dlg: 'merge', sep: true, smart: true, trainer: false, trans: 'gap', orp: 'classic', hud: true, dimPunct: true, sledStyle: 'line' };
 let settings = { ...defaults, ...JSON.parse(localStorage.getItem('fr_set') || '{}') };
 // одноразовая миграция: старый дефолт 'cut' → новый 'gap', чтобы улучшение смены слов
 // доехало до тех, кто открывал апп до апдейта (осознанный выбор потом не трогаем — флаг v)
@@ -844,6 +855,7 @@ function toast(html) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 1600);
 }
+function notify(text) { toast(escapeHtml(String(text))); } // нефатальные сообщения вместо блокирующего alert
 
 /* ============ Рендер ============ */
 function displayWord(t) {
@@ -1120,6 +1132,7 @@ function renderCollection(curTr, past) {
 }
 let sledAnim = null;
 function renderSled(tr) {
+  state._lastTrace = tr;
   $('sledTitle').textContent = state.title;
   const svg = $('sledSvg'); svg.innerHTML = '';
   const past = loadTraces();
@@ -1130,8 +1143,18 @@ function renderSled(tr) {
     renderCollection(tr, past); return;
   }
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const pathEl = svgEl('path', { class: 'ln', d: smoothPath(tr.pts) });
-  svg.appendChild(pathEl);
+  const style = settings.sledStyle || 'line', baseY = 146;
+  let pathEl = null;
+  if (style === 'seismo') {
+    tr.pts.forEach(p => svg.appendChild(svgEl('line', { class: 'bar', x1: p.x.toFixed(1), x2: p.x.toFixed(1), y1: baseY, y2: p.y.toFixed(1) })));
+  } else {
+    if (style === 'wave') {
+      const a = tr.pts[0], b = tr.pts[tr.pts.length - 1];
+      svg.appendChild(svgEl('path', { class: 'wavefill', d: smoothPath(tr.pts) + ` L${b.x.toFixed(1)} ${baseY} L${a.x.toFixed(1)} ${baseY} Z` }));
+    }
+    pathEl = svgEl('path', { class: 'ln', d: smoothPath(tr.pts) });
+    svg.appendChild(pathEl);
+  }
   const regEls = tr.regs.map(p => { const c = svgEl('circle', { class: 'reg', cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: reduce ? 4 : 0 }); svg.appendChild(c); return c; });
   const week = weekAvgSmoothness(past), delta = week == null ? null : tr.smoothness - week;
   $('sledDelta').textContent = delta == null ? 'первый след недели' : (delta >= 0 ? '+' + delta : '' + delta) + ' к среднему';
@@ -1140,12 +1163,43 @@ function renderSled(tr) {
   $('sledInsightT').textContent = it; $('sledInsightB').textContent = ib;
   renderCollection(tr, past);
   if (reduce) { $('sledSmooth').textContent = tr.smoothness; return; }
-  const len = pathEl.getTotalLength();
-  pathEl.style.strokeDasharray = len; pathEl.style.strokeDashoffset = len;
-  pathEl.style.transition = 'stroke-dashoffset 1.25s cubic-bezier(.22,.61,.36,1)';
-  requestAnimationFrame(() => { pathEl.style.strokeDashoffset = 0; });
-  regEls.forEach((c, j) => setTimeout(() => { c.setAttribute('r', 4); if (c.animate) c.animate([{ transform: 'scale(0)' }, { transform: 'scale(1.4)' }, { transform: 'scale(1)' }], { duration: 320, easing: 'cubic-bezier(.34,1.56,.64,1)' }); }, 950 + j * 90));
   countUp($('sledSmooth'), tr.smoothness, 1000);
+  if (pathEl) {
+    const len = pathEl.getTotalLength();
+    pathEl.style.strokeDasharray = len; pathEl.style.strokeDashoffset = len;
+    pathEl.style.transition = 'stroke-dashoffset 1.25s cubic-bezier(.22,.61,.36,1)';
+    requestAnimationFrame(() => { pathEl.style.strokeDashoffset = 0; });
+  }
+  regEls.forEach((c, j) => setTimeout(() => { c.setAttribute('r', 4); if (c.animate) c.animate([{ transform: 'scale(0)' }, { transform: 'scale(1.4)' }, { transform: 'scale(1)' }], { duration: 320, easing: 'cubic-bezier(.34,1.56,.64,1)' }); }, 950 + j * 90));
+}
+function shareSled() {
+  const tr = state._lastTrace;
+  if (!tr || tr.short) { notify('Слишком короткий след для картинки'); return; }
+  const cardW = 640, cardH = 380, ox = 40, oy = 120, tW = 560, tH = 190;
+  const sc = p => ({ x: ox + p.x / 322 * tW, y: oy + p.y / 150 * tH });
+  const line = smoothPath(tr.pts.map(sc));
+  const dots = tr.regs.map(p => { const q = sc(p); return `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="6" fill="#ff5a4e"/>`; }).join('');
+  const title = escapeHtml((state.title || '').slice(0, 38));
+  const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${cardW}" height="${cardH}" viewBox="0 0 ${cardW} ${cardH}">`
+    + `<rect width="${cardW}" height="${cardH}" rx="20" fill="#1f1f26"/>`
+    + `<text x="40" y="54" fill="#8a8894" font-family="sans-serif" font-size="13" letter-spacing="3">СЛЕД СЕССИИ</text>`
+    + `<text x="40" y="86" fill="#e8e6e1" font-family="sans-serif" font-size="25" font-weight="700">${title}</text>`
+    + `<path d="${line}" fill="none" stroke="#e8e6e1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}`
+    + `<text x="40" y="${oy + tH + 56}" fill="#ff5a4e" font-family="sans-serif" font-size="44" font-weight="700">${tr.smoothness}</text>`
+    + `<text x="118" y="${oy + tH + 56}" fill="#8a8894" font-family="sans-serif" font-size="15">ровность · Чехов</text></svg>`;
+  const img = new Image();
+  const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml' }));
+  img.onload = () => {
+    const cv = document.createElement('canvas'); cv.width = cardW * 2; cv.height = cardH * 2;
+    const ctx = cv.getContext('2d'); ctx.scale(2, 2); ctx.drawImage(img, 0, 0); URL.revokeObjectURL(url);
+    cv.toBlob(async png => {
+      const file = new File([png], 'sled-chekhov.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Мой след — Чехов' }); return; } catch (e) {} }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(png); a.download = 'sled-chekhov.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    }, 'image/png');
+  };
+  img.onerror = () => notify('Не удалось собрать картинку');
+  img.src = url;
 }
 function playRhythm() {
   const path = $('sledSvg').querySelector('path.ln'); if (!path) return;
@@ -1289,7 +1343,7 @@ function saveProgress() {
 /* ============ Открытие документа ============ */
 function openDoc(title, text, resumeIdx) {
   const tokens = tokenize(text);
-  if (!tokens.length) { alert('Текст пуст'); return; }
+  if (!tokens.length) { notify('Текст пуст'); return; }
   state.tokens = tokens;
   state.starts = sentenceStarts(tokens);
   state.title = title;
@@ -1313,7 +1367,7 @@ function openDoc(title, text, resumeIdx) {
 /* ============ События ============ */
 $('readPasted').onclick = () => {
   const text = $('pasteArea').value.trim();
-  if (!text) { alert('Вставь текст'); return; }
+  if (!text) { notify('Вставь текст'); return; }
   const probe = tokenize(text).length;
   openDoc('Вставленный текст', text, +(localStorage.getItem('fr_pos_Вставленный текст_' + probe) || 0));
 };
@@ -1327,7 +1381,7 @@ $('fileInput').onchange = async e => {
     else { text = await file.text(); title = file.name.replace(/\.txt$/i, ''); }
     const probe = tokenize(text).length;
     openDoc(title, text, +(localStorage.getItem('fr_pos_' + title + '_' + probe) || 0));
-  } catch (err) { alert('Ошибка: ' + err.message); }
+  } catch (err) { notify('Ошибка: ' + err.message); }
   e.target.value = '';
 };
 
@@ -1399,11 +1453,13 @@ function syncPanel() {
   $('trainerChk').checked = settings.trainer;
   $('transSel').value = settings.trans;
   $('orpSel').value = settings.orp;
+  $('sledStyleSel').value = settings.sledStyle;
   $('hudChk').checked = settings.hud;
   $('dimPunctChk').checked = settings.dimPunct;
 }
 $('transSel').onchange = e => { settings.trans = e.target.value; applySettings(); tpStart(); };
 $('orpSel').onchange = e => { settings.orp = e.target.value; applySettings(); renderWord(); };
+$('sledStyleSel').onchange = e => { settings.sledStyle = e.target.value; applySettings(); };
 $('sizeRange').oninput = e => { settings.size = +e.target.value; applySettings(); renderWord(); };
 $('fontSel').onchange = e => { settings.font = e.target.value; applySettings(); renderWord(); };
 $('dlgSel').onchange = e => { settings.dlg = e.target.value; applySettings(); renderWord(); };
@@ -1425,6 +1481,7 @@ $('finRestart').onclick = () => {
 };
 $('finRegBtn').onclick = () => { $('finish').classList.remove('open'); showRegList(); };
 $('sledPlay').onclick = playRhythm;
+$('sledShare').onclick = shareSled;
 $('regClose').onclick = () => $('regModal').classList.remove('open');
 $('regModal').onclick = e => { if (e.target === $('regModal')) $('regModal').classList.remove('open'); };
 
@@ -1465,7 +1522,7 @@ async function initSamples() {
           const title = item.title || item.file.replace(/\.txt$/i, '');
           const probe = tokenize(text).length;
           openDoc(title, text, +(localStorage.getItem('fr_pos_' + title + '_' + probe) || 0));
-        } catch (err) { alert('Ошибка: ' + err.message); }
+        } catch (err) { notify('Ошибка: ' + err.message); }
       };
       wrap.appendChild(b);
     });
@@ -1479,7 +1536,7 @@ async function openSample(file, title) {
     const text = await r.text();
     const probe = tokenize(text).length;
     openDoc(title, text, +(localStorage.getItem('fr_pos_' + title + '_' + probe) || 0));
-  } catch (err) { alert('Ошибка: ' + err.message); }
+  } catch (err) { notify('Ошибка: ' + err.message); }
 }
 
 /* ============ Турнир «Чехов-Кубок» ============ */
@@ -1500,26 +1557,27 @@ const LB_local = {
 // Личность пока name-pick (локально); magic-link — следующий шаг усиления.
 const SB_URL = 'https://tqmgcuovufwrsxrblzvo.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRxbWdjdW92dWZ3cnN4cmJsenZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1MDcwNTUsImV4cCI6MjA5NzA4MzA1NX0.YwhdetMKJjC0BAYZtljRTUzIBoV3GtsTXYmJbeXZWvQ';
-let _sb = null;
-async function sbClient() {
-  if (_sb) return _sb;
-  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
-  _sb = createClient(SB_URL, SB_KEY);
-  return _sb;
+// лёгкий REST-клиент Supabase через fetch — без тяжёлого SDK (раньше тянулось ~15 модулей с esm.sh ради пинга)
+const SB_H = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
+async function sbInsert(table, row) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`, { method: 'POST', headers: { ...SB_H, Prefer: 'return=minimal' }, body: JSON.stringify(row) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+}
+async function sbSelect(table, query) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${query}`, { headers: SB_H });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
 }
 const LB_supabase = {
   me: LB_local.me,            // имя — локально (name-pick MVP)
   signIn: LB_local.signIn,
   async submit(e) {
-    const sb = await sbClient();
-    const { error } = await sb.from('scores').insert({ name: e.name, day: e.day, base: e.base, eff_wpm: e.effWpm, comp: e.comp });
-    if (error) { console.warn('submit', error); alert('Не удалось отправить результат: ' + error.message); }
+    try { await sbInsert('scores', { name: e.name, day: e.day, base: e.base, eff_wpm: e.effWpm, comp: e.comp }); }
+    catch (err) { console.warn('submit', err); notify('Не удалось отправить результат'); }
   },
   async scores() {
-    const sb = await sbClient();
-    const { data, error } = await sb.from('scores').select('name,day,base,eff_wpm');
-    if (error) { console.warn('scores', error); return []; }
-    return (data || []).map(r => ({ name: r.name, day: r.day, base: r.base, effWpm: r.eff_wpm }));
+    try { const data = await sbSelect('scores', 'select=name,day,base,eff_wpm'); return (data || []).map(r => ({ name: r.name, day: r.day, base: r.base, effWpm: r.eff_wpm })); }
+    catch (err) { console.warn('scores', err); return []; }
   },
 };
 const LB = LB_supabase;   // общий лидерборд через Supabase
@@ -1530,7 +1588,7 @@ function vid() {
   if (!v) { v = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'v-' + Date.now().toString(36) + Math.random().toString(36).slice(2); localStorage.setItem('czk_vid', v); }
   return v;
 }
-async function track(step) { try { const sb = await sbClient(); await sb.from('visits').insert({ vid: vid(), step }); } catch (e) {} }
+async function track(step) { try { await sbInsert('visits', { vid: vid(), step }); } catch (e) {} }
 
 // очки гейтятся пониманием, а не сырой скоростью (2 вопроса: 2→10, 1→4, 0→0)
 function dayScore(correct, total) {
@@ -1578,7 +1636,7 @@ function renderTournament(day) {
 async function czkStartRead(day) {
   let text;
   try { text = await (await fetch('sample-books/' + day.file, { cache: 'no-cache' })).text(); }
-  catch (e) { alert('Не удалось загрузить отрывок'); return; }
+  catch (e) { notify('Не удалось загрузить отрывок'); return; }
   state.tournament = day;
   openDoc('🏆 ' + day.title, text, 0);
 }
