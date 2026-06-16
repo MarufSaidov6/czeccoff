@@ -31,9 +31,13 @@
   /* reticle (word modes) */
   .ret { display:flex; flex-direction:column; align-items:center; gap:14px; }
   .tick { width:7px; height:2px; border-radius:2px; background:var(--accent); opacity:.55; transition:opacity .12s ease, transform .12s ease; }
-  .tick.beat { opacity:.95; transform:scaleX(1.6); }
-  .wr { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:baseline; width:min(86vw,560px); font-weight:500; letter-spacing:.01em; font-size:50px; transition:transform .14s ease; }
-  .wr.beat { transform:scale(1.05); }
+  .tick.beat { animation:tickBeat 175ms ease; }
+  @keyframes tickBeat { 0%{opacity:.55;transform:scaleX(1)} 30%{opacity:1;transform:scaleX(1.7)} 100%{opacity:.55;transform:scaleX(1)} }
+  .wr { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:baseline; width:min(86vw,560px); font-weight:500; letter-spacing:.01em; font-size:50px; }
+  .wr.beat   { animation:beatS 180ms ease-out; }   /* сильная доля (икт): пружина с овершутом */
+  .wr.beat-w { animation:beatW 150ms ease-out; }   /* слабая доля */
+  @keyframes beatS { 0%{transform:scale(1)} 28%{transform:scale(1.08)} 56%{transform:scale(.992)} 100%{transform:scale(1)} }
+  @keyframes beatW { 0%{transform:scale(1)} 45%{transform:scale(1.022)} 100%{transform:scale(1)} }
   .wr .pre { text-align:right; white-space:pre; }
   .wr .orp { color:var(--accent); text-align:center; white-space:pre; }
   .wr .post { text-align:left; white-space:pre; }
@@ -42,8 +46,9 @@
   @keyframes lineIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
   .line.in { animation:lineIn .28s ease; }
   .line.out { opacity:0; transition:opacity .25s ease; }
-  .bw { opacity:0; transition:opacity .14s ease; }
-  .bw.show { opacity:1; }
+  .bw { opacity:0; transform:translateY(8px); color:#bdbbc4; }
+  .bw.show { opacity:1; transform:none; transition:opacity .22s ease, transform .34s cubic-bezier(.34,1.56,.64,1); } /* пружинный въезд */
+  .bw.strong { color:var(--text); } /* слово на сильной доле — ярче */
   .bw .a { color:var(--accent); }
   /* stanza glow (whole poem) */
   .poem { font-size:23px; line-height:1.75; max-width:min(90vw,640px); white-space:pre-wrap; text-align:center; }
@@ -58,12 +63,21 @@
   .cword .pre { text-align:right; white-space:pre; }
   .cword .orp { color:var(--accent); text-align:center; white-space:pre; }
   .cword .post { text-align:left; white-space:pre; }
+  /* blur ∝ |z − z_focus| (circle of confusion), запечён в стопы; перспектива даёт масштаб ∝ 1/(P−z) */
   @keyframes fly {
-    0%   { transform:translateZ(-1500px); opacity:0; filter:blur(6px); }
-    18%  { opacity:.7; }
-    48%  { transform:translateZ(-30px); opacity:1; filter:blur(0); }
-    62%  { transform:translateZ(60px); opacity:1; filter:blur(0); }
-    100% { transform:translateZ(600px); opacity:0; filter:blur(4px); }
+    0%   { transform:translateZ(-1500px); opacity:0;  filter:blur(7px); }
+    12%  { opacity:.7; }
+    25%  { transform:translateZ(-1000px); filter:blur(5.3px); }
+    40%  { transform:translateZ(-560px);  filter:blur(3.3px); }
+    55%  { transform:translateZ(-150px);  opacity:1; filter:blur(.9px); }
+    68%  { transform:translateZ(10px);    opacity:1; filter:blur(0); }   /* фокальная плоскость — резко в точке чтения */
+    78%  { transform:translateZ(170px);   opacity:1; filter:blur(1px); }
+    100% { transform:translateZ(560px);   opacity:0; filter:blur(3.3px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wr.beat, .wr.beat-w, .tick.beat { animation:none !important; }
+    .line.in { animation:none !important; }
+    .bw, .bw.show { transition:none !important; transform:none !important; }
   }
 </style>
 </head>
@@ -71,6 +85,7 @@
 <div class="bar">
   <div class="grp" id="modes"></div>
   <div class="grp"><label>стих</label><select id="poemSel"></select></div>
+  <div class="grp"><label>метр</label><select id="meterSel"><option value="iamb">ямб</option><option value="trochee">хорей</option><option value="amphibrach">амфибрахий</option><option value="anapest">анапест</option><option value="dactyl">дактиль</option><option value="flat">— ровно</option></select></div>
   <div class="grp"><label>сл/мин</label><input type="range" id="wpm" min="120" max="480" step="10" value="240"><span id="wpmv">240</span></div>
   <div class="grp"><button id="play" class="play">▶</button><button id="restart" title="сначала">⟲</button><button id="pasteBtn">свой текст</button></div>
 </div>
@@ -100,7 +115,7 @@ const POEMS = {
 const MODES = [
   ['rsvp', 'Плоский RSVP', 'Базовый: слово за словом в одной точке. Быстро, но плющит ритм и строку.'],
   ['line', 'Дыхание строки', 'Единица — строка. Появляется целиком, держится по метру, выдох между строфами.'],
-  ['meter', 'Пульс метра', 'Пословно, но слово и «прицел» пульсируют в такт ямбу — ритм чувствуешь телом.'],
+  ['meter', 'Пульс метра', 'Пословно; пульс по силлабо-тонической сетке — сильный удар на иктах, слабый между. Ритм чувствуешь телом.'],
   ['build', 'Сборка строки', 'Слова добавляются и остаются — строка собирается на глазах, затем растворяется.'],
   ['ring', 'Кольцо', 'Как «дыхание строки», но в конце финальная строка отматывается назад и стих замыкается.'],
   ['glow', 'Бегущий огонёк', 'Вся строфа на экране тускло, яркая «голова» скользит по словам. Видна форма стиха.'],
@@ -141,6 +156,31 @@ function curLines() {
   if (window._useCustom && t) return t.split('\n').map(s => s.trim());
   return POEMS[$('poemSel').value];
 }
+/* ---------- метр (силлабо-тоника) ---------- */
+const VOW = /[аеёиоуыэюяАЕЁИОУЫЭЮЯ]/;
+function syllables(word) {
+  return [...word].filter(c => VOW.test(c)).length;
+}
+function isIctus(pos, meter) { // pos — 1-based номер слога в строке
+  switch (meter) {
+    case 'trochee': return pos % 2 === 1;
+    case 'iamb': return pos % 2 === 0;
+    case 'dactyl': return pos % 3 === 1;
+    case 'amphibrach': return pos % 3 === 2;
+    case 'anapest': return pos % 3 === 0;
+    default: return false; // 'flat' — без сетки
+  }
+}
+function lineBeats(line, meter) { // → [{w, strong}]: сильная доля, если слог слова попал на икт
+  const ts = toks(line); let syl = 0;
+  return ts.map(w => {
+    const n = syllables(w); let strong = false;
+    for (let p = syl + 1; p <= syl + n; p++) if (isIctus(p, meter)) { strong = true; break; }
+    syl += n;
+    return { w, strong };
+  });
+}
+const curMeter = () => ($('meterSel') ? $('meterSel').value : 'iamb');
 function pace(tok) {
   let m = 1; const w = tok.w;
   if (/[.!?…]$/.test(w)) m += 1.3; else if (/[,;:—]$/.test(w)) m += 0.5;
@@ -149,8 +189,12 @@ function pace(tok) {
   return m;
 }
 function flatWords() {
-  const ls = curLines(); const seq = [];
-  ls.forEach((line, li) => { if (!line) return; const ts = toks(line); ts.forEach((w, wi) => seq.push({ w, lineEnd: wi === ts.length - 1, stanzaEnd: wi === ts.length - 1 && (li + 1) % 4 === 0 })); });
+  const ls = curLines(); const seq = []; const meter = curMeter();
+  ls.forEach((line, li) => {
+    if (!line) return;
+    const bs = lineBeats(line, meter);
+    bs.forEach((b, wi) => seq.push({ w: b.w, strong: b.strong, lineEnd: wi === bs.length - 1, stanzaEnd: wi === bs.length - 1 && (li + 1) % 4 === 0 }));
+  });
   return seq;
 }
 
@@ -168,10 +212,10 @@ function setWord(word) {
   const ch = [...word]; const ci = orp(word, '500 ' + parseFloat(getComputedStyle(wr).fontSize) + 'px ' + getComputedStyle(wr).fontFamily);
   wr.children[0].textContent = ch.slice(0, ci).join(''); wr.children[1].textContent = ch[ci] || ''; wr.children[2].textContent = ch.slice(ci + 1).join('');
 }
-function pulse() {
+function pulse(strong) {
   const wr = view().querySelector('.wr'), ts = view().querySelectorAll('.tick'); if (!wr) return;
-  wr.classList.add('beat'); ts.forEach(t => t.classList.add('beat'));
-  setTimeout(() => { wr.classList.remove('beat'); ts.forEach(t => t.classList.remove('beat')); }, 130);
+  wr.classList.remove('beat', 'beat-w'); void wr.offsetWidth; wr.classList.add(strong ? 'beat' : 'beat-w'); // reflow → перезапуск анимации
+  if (strong) ts.forEach(t => { t.classList.remove('beat'); void t.offsetWidth; t.classList.add('beat'); });
 }
 
 /* ---------- раннеры ---------- */
@@ -180,8 +224,9 @@ function runWords(meter) {
   let i = 0;
   const go = () => {
     if (i >= seq.length) { T = setTimeout(() => { i = 0; go(); }, 1300); return; }
-    const tok = seq[i]; setWord(tok.w); if (meter) pulse();
-    let mul = pace(tok); if (meter) mul *= (i % 2 ? 0.9 : 1.12);
+    const tok = seq[i]; setWord(tok.w); if (meter) pulse(tok.strong);
+    let mul = pace(tok);
+    if (meter) mul *= Math.max(0.5, syllables(tok.w) / 2) * (tok.strong ? 1.08 : 0.94); // изохрония (∝ слогам) + агогический swing
     i++; T = setTimeout(go, (60000 / wpm) * mul);
   };
   go();
@@ -223,15 +268,17 @@ function mirror(line, done) {
 }
 function runBuild() {
   const ls = curLines().filter(Boolean); if (!ls.length) return;
+  const meter = curMeter();
   let li = 0;
   const goLine = () => {
-    const ws = toks(ls[li]); view().innerHTML = '<div class="line" id="bl"></div>';
+    const bs = lineBeats(ls[li], meter); view().innerHTML = '<div class="line" id="bl"></div>';
     const host = $('bl'); let wi = 0;
     const addWord = () => {
-      if (wi >= ws.length) { T = setTimeout(() => { const el = $('bl'); if (el) el.classList.add('out'); T = setTimeout(() => { li = (li + 1) % ls.length; goLine(); }, 260); }, (60000 / wpm) * 2.2 + 300); return; }
-      const sp = document.createElement('span'); sp.className = 'bw'; sp.textContent = (wi ? ' ' : '') + ws[wi]; host.appendChild(sp);
+      if (wi >= bs.length) { T = setTimeout(() => { const el = $('bl'); if (el) el.classList.add('out'); T = setTimeout(() => { li = (li + 1) % ls.length; goLine(); }, 260); }, (60000 / wpm) * 2.2 + 300); return; }
+      const sp = document.createElement('span'); sp.className = 'bw' + (bs[wi].strong ? ' strong' : ''); sp.textContent = (wi ? ' ' : '') + bs[wi].w; host.appendChild(sp);
       requestAnimationFrame(() => sp.classList.add('show'));
-      wi++; T = setTimeout(addWord, (60000 / wpm) * 0.9);
+      const ease = 0.55 + 0.6 * (1 - wi / bs.length); // накат: первые слова медленнее, к концу быстрее
+      wi++; T = setTimeout(addWord, (60000 / wpm) * 0.9 * ease);
     };
     addWord();
   };
@@ -262,15 +309,15 @@ function runCorridor() {
   const seq = flatWords(); if (!seq.length) return;
   view().innerHTML = '<div class="corr" id="corr"></div>';
   const corr = $('corr'); let i = 0;
-  const go = () => {
-    if (i >= seq.length) { T = setTimeout(() => { i = 0; go(); }, 1100); return; }
+  const spawn = () => {
+    if (i >= seq.length) { T = setTimeout(() => { i = 0; spawn(); }, 1100); return; }
     const tok = seq[i]; const interval = (60000 / wpm) * pace(tok);
-    const el = flyWord(corr, tok.w);
-    el.addEventListener('animationend', () => el.remove()); // несколько слов в полёте на разной глубине = коридор
+    const el = flyWord(corr, tok.w); // несколько слов в полёте на разной глубине = коридор
+    el.addEventListener('animationend', () => el.remove());
     corr.appendChild(el); el.style.animation = 'fly ' + Math.round(interval * 2.4) + 'ms ease-in forwards';
-    i++; T = setTimeout(go, interval);
+    i++; T = setTimeout(spawn, interval);
   };
-  go();
+  spawn();
 }
 
 /* ---------- управление ---------- */
@@ -292,6 +339,7 @@ function restart() { const wasPlaying = playing; pause(); if (wasPlaying) start(
 MODES.forEach(([id, name]) => { const b = document.createElement('button'); b.textContent = name; b.dataset.m = id; if (id === mode) b.classList.add('on'); b.onclick = () => { mode = id; document.querySelectorAll('#modes button').forEach(x => x.classList.toggle('on', x.dataset.m === id)); $('desc').textContent = MODES.find(m => m[0] === id)[2]; start(); }; $('modes').appendChild(b); });
 Object.keys(POEMS).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = k; $('poemSel').appendChild(o); });
 $('poemSel').onchange = () => { window._useCustom = false; start(); };
+$('meterSel').onchange = () => { if (playing) start(); };
 $('wpm').oninput = e => { wpm = +e.target.value; $('wpmv').textContent = wpm; if (playing) start(); };
 $('play').onclick = () => playing ? pause() : start();
 $('restart').onclick = restart;
