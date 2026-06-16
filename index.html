@@ -487,6 +487,10 @@
       <div><div class="l">Приглушать знаки</div><div class="d">Кавычки и краевая пунктуация тусклее букв</div></div>
       <label class="switch"><input type="checkbox" id="dimPunctChk"><span class="tr"></span></label>
     </div>
+    <div class="set">
+      <div><div class="l">Онбординг</div><div class="d">Показать вводный тур заново</div></div>
+      <button class="btn" id="obReplay" style="padding:8px 14px;font-size:13px">Пройти заново</button>
+    </div>
     <button class="btn primary close" id="setClose">Готово</button>
   </div>
 </div>
@@ -1219,6 +1223,7 @@ function tpStart() {
 /* ============ Настройки: события ============ */
 $('setBtn').onclick = () => { pause(); syncPanel(); $('settings').classList.add('open'); tpStart(); };
 $('setClose').onclick = () => { $('settings').classList.remove('open'); tpStop(); };
+$('obReplay').onclick = () => { $('settings').classList.remove('open'); tpStop(); obShow(true); };
 $('settings').onclick = e => { if (e.target === $('settings')) { $('settings').classList.remove('open'); tpStop(); } };
 function syncPanel() {
   $('sizeRange').value = settings.size;
@@ -1547,8 +1552,8 @@ function obTrail() {
 }
 function obEnd() { clearTimeout(obTimer); localStorage.setItem('czk_onboarded', '1'); $('onboard').classList.remove('open'); }
 function obGo(name) { ob.step = OB_STEPS.indexOf(name); obRender(); }
-function obShow() {
-  if (localStorage.getItem('czk_onboarded') || localStorage.getItem('fr_last')) return;
+function obShow(force) {
+  if (!force && (localStorage.getItem('czk_onboarded') || localStorage.getItem('fr_last'))) return;
   ob.step = 0; obRender(); $('onboard').classList.add('open');
 }
 function obRender() {
@@ -1608,16 +1613,33 @@ function obRender() {
     $('obc').onclick = () => obGo('tournament'); $('obs').onclick = () => obGo('tournament');
 
   } else if (s === 'tournament') {
-    const nm = ob.name.trim() || 'Ты'; const my = (ob.result && ob.result.wpm) || 300;
+    const nm = ob.name.trim() || 'Ты';
     b.innerHTML = '<div class="ob-fill" style="gap:16px">'
       + '<div style="text-align:center;margin-top:6px"><div class="ob-h1" style="margin:0">Готово, ' + escapeHtml(nm) + '! 🎉</div><div class="ob-lead" style="margin-top:8px">Цель: ' + ob.goal + ' мин в день. День 1 начат — держи серию.</div></div>'
-      + '<div class="ob-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:600"><span>🏆</span> Турнир дня · команда</div>'
-      + '<div class="ob-lb-row me"><span style="color:var(--muted);width:22px">—</span><span style="flex:1">' + escapeHtml(nm) + ' · ты</span><span style="color:var(--accent);font-weight:600">' + my + '</span></div>'
-      + '<div class="ob-lb-row"><span style="width:22px;text-align:center">📖</span><span style="flex:1;color:var(--muted)">Эталон дня</span><span style="color:var(--muted)">обгони</span></div></div>'
-      + '<div class="ob-card"><span class="ob-badge">Эталон дня</span><div style="font-size:15px;line-height:1.5;margin-top:8px">«Дама с собачкой» · отрывок на 120 слов</div><div class="ob-lead" style="margin-top:6px">Цель: 400 сл/мин + 2 вопроса на понимание</div></div>'
+      + '<div class="ob-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:600"><span>🏆</span> Турнир дня · команда</div><div id="obLb"><div class="ob-lead">Загрузка лидерборда…</div></div></div>'
+      + '<div class="ob-card" id="obEt"><span class="ob-badge">Эталон дня</span><div class="ob-lead" style="margin-top:8px">Загрузка…</div></div>'
       + '</div><button class="btn primary obcta" id="obc">В турнир →</button><button class="ob-skip" id="obs">Позже — на главную</button>';
     $('obc').onclick = async () => { const n = ob.name.trim(); if (n) await LB.signIn(n); obEnd(); openTournament(); };
     $('obs').onclick = obEnd;
+    // реальный отрывок дня + реальный лидерборд из Supabase
+    (async () => {
+      await czkLoad(); const day = czkToday(CZK);
+      if (s === OB_STEPS[ob.step] && $('obEt')) $('obEt').innerHTML = '<span class="ob-badge">Эталон дня</span>'
+        + (day ? '<div style="font-size:15px;line-height:1.5;margin-top:8px">' + escapeHtml(day.title) + (day.author ? ' · ' + escapeHtml(day.author) : '') + '</div><div class="ob-lead" style="margin-top:6px">Прочитай + 2 вопроса · обгони эталон (11 очков)</div>'
+                : '<div class="ob-lead" style="margin-top:8px">Отрывок дня скоро появится.</div>');
+      let rows = [];
+      try {
+        const all = await LB.scores(); const dk = todayISO(); const today = all.filter(x => x.day === dk);
+        const full = today.filter(x => x.base >= 10).sort((a, b) => b.effWpm - a.effWpm);
+        const bonus = {}; full.forEach((x, i) => bonus[x.name] = i === 0 ? 3 : i === 1 ? 2 : i === 2 ? 1 : 0);
+        rows = today.map(x => ({ name: x.name, pts: x.base + (bonus[x.name] || 0) }));
+      } catch (e) {}
+      rows.push({ name: 'Эталон дня', pts: 11, ghost: true });
+      rows.sort((a, b) => b.pts - a.pts);
+      if (s !== OB_STEPS[ob.step] || !$('obLb')) return;
+      $('obLb').innerHTML = rows.slice(0, 6).map((r, i) => '<div class="ob-lb-row"><span style="color:var(--muted);width:22px;text-align:center">' + (r.ghost ? '📖' : (i + 1)) + '</span><span style="flex:1' + (r.ghost ? ';color:var(--muted)' : '') + '">' + escapeHtml(r.name) + '</span><span style="color:var(--muted)">' + r.pts + '</span></div>').join('')
+        + '<div class="ob-lb-row me"><span style="width:22px;text-align:center">→</span><span style="flex:1">' + escapeHtml(nm) + ' · ты</span><span style="color:var(--accent);font-weight:600">сыграй</span></div>';
+    })();
   }
 }
 
@@ -1627,7 +1649,7 @@ updateStats();
 initResume();
 renderDays();
 initSamples();
-obShow();
+obShow(/onboarding=1/.test(location.search) || location.hash.indexOf('onboarding') >= 0);
 track('open');
 </script>
 </body>
