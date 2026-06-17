@@ -28,6 +28,8 @@ eval(grab(/function plural[\s\S]*?\n}/, 'plural'));
 eval(grab(/function edgePunct[\s\S]*?\n}/, 'edgePunct'));
 eval(grab(/function deriveStreak[\s\S]*?\n}/, 'deriveStreak'));
 eval(grab(/function resolveObVariant[\s\S]*?\n}/, 'resolveObVariant'));
+eval(grab(/function isExpired[\s\S]*?}/, 'isExpired'));
+eval(grab(/function shouldSubmit[\s\S]*?\n}/, 'shouldSubmit'));
 
 // --- раннер ---
 let pass=0, fail=0; const fails=[];
@@ -202,6 +204,19 @@ console.log('— Секция 13: A/B-вариант онбординга (resol
   t('OBV-04','URL важнее сохранённого', resolveObVariant('?ob=v1', { czk_ob: 'v2' }, 'x') === 'v1');
   t('OBV-05','детерминированность по vid', resolveObVariant('', {}, 'abc') === resolveObVariant('', {}, 'abc'));
   t('OBV-06','оба варианта достижимы', (() => { const a = new Set(); for (let i = 0; i < 40; i++) a.add(resolveObVariant('', {}, 'v' + i)); return a.has('v1') && a.has('v2'); })());
+}
+
+console.log('— Секция 14: анон-auth и best-wins (isExpired / shouldSubmit) —');
+{
+  const now = 1_000_000;
+  t('AUTH-01','нет expires_at → истёк', isExpired(null, now) === true);
+  t('AUTH-02','истекает в пределах буфера 60с → истёк', isExpired(now + 30_000, now) === true);
+  t('AUTH-03','валидный токен → не истёк', isExpired(now + 600_000, now) === false);
+  t('SUB-01','нет прежнего → пишем', shouldSubmit({ base: 4, effWpm: 300 }, null) === true);
+  t('SUB-02','база выше → пишем', shouldSubmit({ base: 10, effWpm: 200 }, { base: 4, effWpm: 900 }) === true);
+  t('SUB-03','база ниже → не пишем', shouldSubmit({ base: 4, effWpm: 900 }, { base: 10, effWpm: 200 }) === false);
+  t('SUB-04','та же база, выше скорость → пишем', shouldSubmit({ base: 10, effWpm: 320 }, { base: 10, effWpm: 300 }) === true);
+  t('SUB-05','та же база, ниже скорость → не пишем', shouldSubmit({ base: 10, effWpm: 280 }, { base: 10, effWpm: 300 }) === false);
 }
 
 console.log('\n========================================');
