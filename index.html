@@ -1287,12 +1287,13 @@ function todayKey() { return new Date().toISOString().slice(0, 10); }
 const isoDay = d => d.toISOString().slice(0, 10);
 const plurDays = n => { const m = n % 100, l = n % 10; return n + ' ' + (m > 10 && m < 20 ? 'дней' : l === 1 ? 'день' : l > 1 && l < 5 ? 'дня' : 'дней'); };
 // серия = подряд идущие дни с чтением (из fr_days). Если сегодня ещё не читал — считаем со вчера.
-function deriveStreak() {
-  const days = JSON.parse(localStorage.getItem('fr_days') || '{}');
-  const d = new Date();
-  if (!(days[isoDay(d)] && days[isoDay(d)].ms > 0)) d.setDate(d.getDate() - 1);
+function deriveStreak(days, today) {
+  days = days || (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('fr_days') || '{}') : {});
+  const d = new Date((today || new Date().toISOString().slice(0, 10)) + 'T00:00:00Z');
+  const k = () => d.toISOString().slice(0, 10);
+  if (!(days[k()] && days[k()].ms > 0)) d.setUTCDate(d.getUTCDate() - 1);
   let n = 0;
-  while (days[isoDay(d)] && days[isoDay(d)].ms > 0) { n++; d.setDate(d.getDate() - 1); }
+  while (days[k()] && days[k()].ms > 0) { n++; d.setUTCDate(d.getUTCDate() - 1); }
   return n;
 }
 function flushDay() {

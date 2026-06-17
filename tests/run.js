@@ -26,6 +26,7 @@ eval(grab(/function transitionPlan[\s\S]*?\n}/, 'transitionPlan'));
 eval(grab(/function dayScore[\s\S]*?\n}/, 'dayScore'));
 eval(grab(/function plural[\s\S]*?\n}/, 'plural'));
 eval(grab(/function edgePunct[\s\S]*?\n}/, 'edgePunct'));
+eval(grab(/function deriveStreak[\s\S]*?\n}/, 'deriveStreak'));
 
 // --- раннер ---
 let pass=0, fail=0; const fails=[];
@@ -179,6 +180,17 @@ console.log('— Секция 11: турнир (dayScore) —');
   t('DSC-01','2/2 верных = 10 очков', dayScore(2,2)===10);
   t('DSC-02','1/2 верных = 4 очка', dayScore(1,2)===4);
   t('DSC-03','0/2 верных = 0 очков', dayScore(0,2)===0);
+}
+
+console.log('— Секция 12: серия чтения (deriveStreak) —');
+{
+  const D = ms => ({ ms });
+  t('STK-01','пустая статистика → 0', deriveStreak({}, '2026-06-17') === 0);
+  t('STK-02','читал сегодня и вчера → 2', deriveStreak({ '2026-06-17': D(100), '2026-06-16': D(100) }, '2026-06-17') === 2);
+  t('STK-03','сегодня не читал, вчера читал → считаем со вчера', deriveStreak({ '2026-06-16': D(100), '2026-06-15': D(100) }, '2026-06-17') === 2);
+  t('STK-04','разрыв в середине обрывает серию', deriveStreak({ '2026-06-17': D(100), '2026-06-15': D(100) }, '2026-06-17') === 1);
+  t('STK-05','день с ms=0 не считается за чтение', deriveStreak({ '2026-06-17': D(0), '2026-06-16': D(100) }, '2026-06-17') === 1);
+  t('STK-06','непрерывная серия через границу месяца', deriveStreak({ '2026-07-01': D(1), '2026-06-30': D(1), '2026-06-29': D(1) }, '2026-07-01') === 3);
 }
 
 console.log('\n========================================');
