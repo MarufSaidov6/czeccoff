@@ -27,13 +27,17 @@ async function mockSupabase(page, seed = []) {
     const req = route.request();
     const url = req.url(), method = req.method();
     if (method === 'OPTIONS') return route.fulfill({ status: 200, headers: cors(), body: '' });
+    if (url.includes('/auth/v1/')) { // анон-вход / refresh → фейк-сессия
+      return route.fulfill({ status: 200, headers: cors(), body: JSON.stringify({ access_token: 'mock-jwt', refresh_token: 'mock-ref', expires_in: 3600, user: { id: 'mock-uid' } }) });
+    }
     if (url.includes('/visits')) return route.fulfill({ status: 201, headers: cors(), body: '[]' });
     if (url.includes('/scores')) {
       if (method === 'POST') {
         try { const b = JSON.parse(req.postData() || '[]'); (Array.isArray(b) ? b : [b]).forEach(r => store.push(r)); } catch (e) {}
         return route.fulfill({ status: 201, headers: cors(), body: '[]' });
       }
-      return route.fulfill({ status: 200, headers: cors(), body: JSON.stringify(store) }); // GET
+      if (url.includes('uid=eq.')) return route.fulfill({ status: 200, headers: cors(), body: '[]' }); // best-wins: своя строка за сегодня отсутствует
+      return route.fulfill({ status: 200, headers: cors(), body: JSON.stringify(store) }); // GET лидерборд
     }
     return route.fulfill({ status: 200, headers: cors(), body: '[]' });
   });

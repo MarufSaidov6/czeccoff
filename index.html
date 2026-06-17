@@ -1586,12 +1586,48 @@ async function sbSelect(table, query) {
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
+// ===== Анонимная личность (Supabase Anonymous Auth) — целостность scores по auth.uid() =====
+function isExpired(expiresAt, now) { return !expiresAt || expiresAt - 60000 <= now; } // буфер 60с
+// ленивый анон-вход: стабильный uid через refresh, без email; повторный signup только если нет refresh-токена
+async function ensureAuth() {
+  let s = JSON.parse(localStorage.getItem('czk_session') || 'null');
+  if (s && s.access_token && !isExpired(s.expires_at, Date.now())) return s;
+  let res;
+  if (s && s.refresh_token) {
+    res = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, { method: 'POST', headers: { apikey: SB_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: s.refresh_token }) });
+    if (!res.ok) s = null;
+  }
+  if (!s || !s.refresh_token) {
+    res = await fetch(`${SB_URL}/auth/v1/signup`, { method: 'POST', headers: { apikey: SB_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+  }
+  if (!res.ok) throw new Error('auth ' + res.status);
+  const d = await res.json();
+  const sess = { access_token: d.access_token, refresh_token: d.refresh_token, uid: (d.user && d.user.id) || d.id, expires_at: Date.now() + ((d.expires_in || 3600) * 1000) };
+  localStorage.setItem('czk_session', JSON.stringify(sess));
+  return sess;
+}
+// best-wins: писать только если новый результат лучше прежнего за день (по base, тай-брейк eff_wpm)
+function shouldSubmit(next, prev) {
+  if (!prev) return true;
+  if (next.base !== prev.base) return next.base > prev.base;
+  return (next.effWpm || 0) > (prev.effWpm || 0);
+}
 const LB_supabase = {
   me: LB_local.me,            // имя — локально (name-pick MVP)
   signIn: LB_local.signIn,
   async submit(e) {
-    try { await sbInsert('scores', { name: e.name, day: e.day, base: e.base, eff_wpm: e.effWpm, comp: e.comp }); }
-    catch (err) { console.warn('submit', err); notify('Не удалось отправить результат'); }
+    try {
+      const { access_token, uid } = await ensureAuth();
+      let prev = null;
+      try { const rows = await sbSelect('scores', `select=base,eff_wpm&uid=eq.${uid}&day=eq.${e.day}`); prev = rows && rows[0] ? { base: rows[0].base, effWpm: rows[0].eff_wpm } : null; } catch (x) {}
+      if (!shouldSubmit({ base: e.base, effWpm: e.effWpm }, prev)) return; // best-wins: хуже прежнего — не пишем
+      const r = await fetch(`${SB_URL}/rest/v1/scores?on_conflict=uid,day`, {
+        method: 'POST',
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + access_token, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ uid, name: e.name, day: e.day, base: e.base, eff_wpm: e.effWpm, comp: e.comp })
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+    } catch (err) { console.warn('submit', err); notify('Не удалось отправить результат'); }
   },
   async scores() {
     try { const data = await sbSelect('scores', 'select=name,day,base,eff_wpm'); return (data || []).map(r => ({ name: r.name, day: r.day, base: r.base, effWpm: r.eff_wpm })); }
