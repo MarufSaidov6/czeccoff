@@ -5,7 +5,7 @@ test.describe('L1 — онбординг: полная воронка + гейм
   test('замер→честный результат→победа(День N)→цель(цепочка)→лончпад→первый текст', async ({ page }) => {
     await mockSupabase(page);
     await freshVisit(page);
-    await page.goto('/');
+    await page.goto('/?ob=v1'); // этот сценарий проверяет v1-воронку (7 шагов)
     await expect(page.locator('#onboard')).toHaveClass(/open/);
 
     await page.click('#obc');                       // welcome → how

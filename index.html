@@ -208,6 +208,8 @@
   .sled-hero .reg { fill: var(--accent); }
   .sled-hero .bar { stroke: var(--text); stroke-width: 3; stroke-linecap: round; }
   .sled-hero .wavefill { fill: var(--accent); opacity: .12; }
+  .sled-streak { color: var(--accent); font-size: 13px; margin: 2px 0 12px; }
+  .ob-wm.ob-wm-sm { font-size: 15px; opacity: .8; }
   .sled-legend { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-top: 8px; }
   .sled-legend .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; }
   .sled-play { position: absolute; right: 14px; bottom: 30px; background: var(--surface); border: 1px solid var(--guide); color: var(--muted); border-radius: 9px; padding: 6px 12px; font-size: 12px; font-family: inherit; cursor: pointer; }
@@ -548,6 +550,7 @@
   <div class="panel sled">
     <div class="sled-over">След сессии</div>
     <div class="sled-title" id="sledTitle">—</div>
+    <div class="sled-streak" id="sledStreak"></div>
     <div class="sled-hero">
       <svg id="sledSvg" viewBox="0 0 322 150" preserveAspectRatio="none" aria-hidden="true"></svg>
       <div class="sled-legend"><span class="dot"></span> красный — где ты возвращался</div>
@@ -567,6 +570,7 @@
     <div id="finishReg"></div>
     <div class="btnrow">
       <button class="btn" id="finRegBtn" style="display:none">Сложные места</button>
+      <button class="btn" id="sledTourn">🏆 В турнир</button>
       <button class="btn primary" id="finRestart">Ещё отрывок — ровнее</button>
       <button class="btn" id="finHome">На главную</button>
     </div>
@@ -1134,6 +1138,7 @@ let sledAnim = null;
 function renderSled(tr) {
   state._lastTrace = tr;
   $('sledTitle').textContent = state.title;
+  const stk = deriveStreak(); $('sledStreak').textContent = stk > 0 ? '🔥 День ' + stk + ' серии' : '';
   const svg = $('sledSvg'); svg.innerHTML = '';
   const past = loadTraces();
   if (tr.short) {
@@ -1214,6 +1219,7 @@ function playRhythm() {
 function finish() {
   pause();
   state.finished = true;
+  flushDay(); // засчитать сессию в дневную статистику → честная серия на «Следе» сразу
   $('finW').textContent = state.sessionWords;
   const sec = Math.round(state.sessionMs / 1000);
   $('finT').textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
@@ -1295,6 +1301,16 @@ function deriveStreak(days, today) {
   let n = 0;
   while (days[k()] && days[k()].ms > 0) { n++; d.setUTCDate(d.getUTCDate() - 1); }
   return n;
+}
+// A/B-вариант онбординга: ?ob=v1|v2 → сохранённый флаг → детерминированный 50/50 по vid
+function resolveObVariant(search, storage, vid) {
+  const m = /[?&]ob=(v1|v2)/.exec(search || '');
+  if (m) return m[1];
+  const saved = storage && storage.czk_ob;
+  if (saved === 'v1' || saved === 'v2') return saved;
+  let h = 5381; const s = String(vid || '');
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return (h % 2) ? 'v2' : 'v1';
 }
 function flushDay() {
   const dw = state.sessionWords - state.flushedW;
@@ -1481,6 +1497,7 @@ $('finRestart').onclick = () => {
   renderWord(); renderContext(); updateStats(); updateTimeLeft();
 };
 $('finRegBtn').onclick = () => { $('finish').classList.remove('open'); showRegList(); };
+$('sledTourn').onclick = () => { $('finish').classList.remove('open'); openTournament(); };
 $('sledPlay').onclick = playRhythm;
 $('sledShare').onclick = shareSled;
 $('regClose').onclick = () => $('regModal').classList.remove('open');
@@ -1808,6 +1825,7 @@ const obDots = n => '<div class="ob-dots">' + Array.from({ length: 7 }, (_, i) =
 function obGo(name) { ob.step = OB_STEPS.indexOf(name); obRender(); }
 function obShow(force) {
   if (!force && (localStorage.getItem('czk_onboarded') || localStorage.getItem('fr_last'))) return;
+  ob.v2 = resolveObVariant(location.search, { czk_ob: localStorage.getItem('czk_ob') }, vid()) === 'v2';
   ob.step = 0; obRender(); $('onboard').classList.add('open');
 }
 function obRender() {
@@ -1817,6 +1835,16 @@ function obRender() {
   if ($('obBack')) $('obBack').onclick = () => { ob.step = Math.max(0, ob.step - 1); obRender(); };
 
   if (s === 'welcome') {
+    if (ob.v2) {
+      b.innerHTML = '<div class="ob-wm ob-wm-sm">Чехов<span>.</span></div>'
+        + '<div class="ob-fill ob-center" style="gap:24px"><div class="ob-fixframe">' + obRet() + '</div>'
+        + '<div class="ob-h1" style="text-align:center">Читай вдвое быстрее.</div>'
+        + '<div class="ob-promise" style="font-size:15px">Глаза на месте — бегущей строки нет.</div></div>'
+        + '<button class="btn primary obcta" id="obc">Читать</button><div class="ob-sublabel">без аккаунта</div>';
+      obFitWords(['читай', 'вдвое', 'быстрее']); obRsvp(['читай', 'вдвое', 'быстрее'], 150, true, obSetWord);
+      $('obc').onclick = () => { track('demo'); obEnd(); openSample(OB_START.file, OB_START.title); };
+      return;
+    }
     b.innerHTML = '<div class="ob-wm">Чехов<span>.</span></div><div class="ob-fill ob-center" style="gap:30px"><div class="ob-fixframe">' + obRet() + '<div class="ob-attrib" id="obAttrib"></div></div><div class="ob-promise">Слово приходит само&nbsp;—<br>глаза стоят на месте.</div></div><button class="btn primary obcta" id="obc">Поехали</button><div class="ob-sublabel">30 секунд на калибровку · без аккаунта</div>';
     obWelcomeStream();
     $('obc').onclick = () => obGo('how');

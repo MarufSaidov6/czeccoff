@@ -27,6 +27,7 @@ eval(grab(/function dayScore[\s\S]*?\n}/, 'dayScore'));
 eval(grab(/function plural[\s\S]*?\n}/, 'plural'));
 eval(grab(/function edgePunct[\s\S]*?\n}/, 'edgePunct'));
 eval(grab(/function deriveStreak[\s\S]*?\n}/, 'deriveStreak'));
+eval(grab(/function resolveObVariant[\s\S]*?\n}/, 'resolveObVariant'));
 
 // --- раннер ---
 let pass=0, fail=0; const fails=[];
@@ -191,6 +192,16 @@ console.log('— Секция 12: серия чтения (deriveStreak) —');
   t('STK-04','разрыв в середине обрывает серию', deriveStreak({ '2026-06-17': D(100), '2026-06-15': D(100) }, '2026-06-17') === 1);
   t('STK-05','день с ms=0 не считается за чтение', deriveStreak({ '2026-06-17': D(0), '2026-06-16': D(100) }, '2026-06-17') === 1);
   t('STK-06','непрерывная серия через границу месяца', deriveStreak({ '2026-07-01': D(1), '2026-06-30': D(1), '2026-06-29': D(1) }, '2026-07-01') === 3);
+}
+
+console.log('— Секция 13: A/B-вариант онбординга (resolveObVariant) —');
+{
+  t('OBV-01','?ob=v2 форсит v2', resolveObVariant('?ob=v2', {}, 'x') === 'v2');
+  t('OBV-02','?ob=v1 форсит v1', resolveObVariant('?a=1&ob=v1', {}, 'x') === 'v1');
+  t('OBV-03','сохранённый флаг', resolveObVariant('', { czk_ob: 'v2' }, 'x') === 'v2');
+  t('OBV-04','URL важнее сохранённого', resolveObVariant('?ob=v1', { czk_ob: 'v2' }, 'x') === 'v1');
+  t('OBV-05','детерминированность по vid', resolveObVariant('', {}, 'abc') === resolveObVariant('', {}, 'abc'));
+  t('OBV-06','оба варианта достижимы', (() => { const a = new Set(); for (let i = 0; i < 40; i++) a.add(resolveObVariant('', {}, 'v' + i)); return a.has('v1') && a.has('v2'); })());
 }
 
 console.log('\n========================================');

@@ -5,7 +5,7 @@ test.describe('L1 — онбординг (воронка)', () => {
   test('первый визит → онбординг + гейтинг CTA на шаге «зачем»', async ({ page }) => {
     await mockSupabase(page);
     await freshVisit(page);
-    await page.goto('/');
+    await page.goto('/?ob=v1'); // сценарий про v1-воронку
     await expect(page.locator('#onboard')).toHaveClass(/open/);
     await expect(page.locator('#obc')).toHaveText('Поехали');
 
