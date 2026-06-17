@@ -80,4 +80,15 @@ test.describe('След — экран завершения сессии', () =>
     }));
     expect(size).toBeGreaterThan(1000);
   });
+
+  test('серия (День N) показывается на «Следе» при данных дня', async ({ page }) => {
+    await skipOnboarding(page);
+    await page.addInitScript(() => { const k = new Date().toISOString().slice(0, 10); localStorage.setItem('fr_days', JSON.stringify({ [k]: { w: 50, ms: 120000 } })); });
+    await page.goto('/');
+    await openPasted(page, TXT);
+    await page.click('#playBtn');
+    await page.waitForFunction(() => typeof state !== 'undefined' && state.paceSamples.length >= 4, null, { timeout: 8000 });
+    await page.evaluate(() => finish());
+    await expect(page.locator('#sledStreak')).toContainText('День');
+  });
 });

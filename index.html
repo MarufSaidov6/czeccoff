@@ -1187,23 +1187,22 @@ function shareSled() {
   const title = escapeHtml((state.title || '').slice(0, 38));
   const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${cardW}" height="${cardH}" viewBox="0 0 ${cardW} ${cardH}">`
     + `<rect width="${cardW}" height="${cardH}" rx="20" fill="#1f1f26"/>`
-    + `<text x="40" y="54" fill="#8a8894" font-family="sans-serif" font-size="13" letter-spacing="3">СЛЕД СЕССИИ</text>`
-    + `<text x="40" y="86" fill="#e8e6e1" font-family="sans-serif" font-size="25" font-weight="700">${title}</text>`
+    + `<text x="40" y="54" fill="#8a8894" font-family="Manrope, sans-serif" font-size="13" letter-spacing="3">СЛЕД СЕССИИ</text>`
+    + `<text x="40" y="86" fill="#e8e6e1" font-family="Manrope, sans-serif" font-size="25" font-weight="700">${title}</text>`
     + `<path d="${line}" fill="none" stroke="#e8e6e1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}`
-    + `<text x="40" y="${oy + tH + 56}" fill="#ff5a4e" font-family="sans-serif" font-size="44" font-weight="700">${tr.smoothness}</text>`
-    + `<text x="118" y="${oy + tH + 56}" fill="#8a8894" font-family="sans-serif" font-size="15">ровность · Чехов</text></svg>`;
+    + `<text x="40" y="${oy + tH + 56}" fill="#ff5a4e" font-family="Manrope, sans-serif" font-size="44" font-weight="700">${tr.smoothness}</text>`
+    + `<text x="118" y="${oy + tH + 56}" fill="#8a8894" font-family="Manrope, sans-serif" font-size="15">ровность · Чехов</text></svg>`;
   const img = new Image();
   const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml' }));
   img.onload = () => {
     const cv = document.createElement('canvas'); cv.width = cardW * 2; cv.height = cardH * 2;
     const ctx = cv.getContext('2d'); ctx.scale(2, 2); ctx.drawImage(img, 0, 0); URL.revokeObjectURL(url);
     cv.toBlob(async png => {
-      const file = new File([png], 'sled-chekhov.png', { type: 'image/png' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Мой след — Чехов' }); return; } catch (e) {} }
+      try { const file = new File([png], 'sled-chekhov.png', { type: 'image/png' }); if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Мой след — Чехов' }); return; } } catch (e) {}
       const a = document.createElement('a'); a.href = URL.createObjectURL(png); a.download = 'sled-chekhov.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
     }, 'image/png');
   };
-  img.onerror = () => notify('Не удалось собрать картинку');
+  img.onerror = () => { URL.revokeObjectURL(url); notify('Не удалось собрать картинку'); };
   img.src = url;
 }
 function playRhythm() {
@@ -1295,7 +1294,8 @@ const plurDays = n => { const m = n % 100, l = n % 10; return n + ' ' + (m > 10 
 // серия = подряд идущие дни с чтением (из fr_days). Если сегодня ещё не читал — считаем со вчера.
 function deriveStreak(days, today) {
   days = days || (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('fr_days') || '{}') : {});
-  const d = new Date((today || new Date().toISOString().slice(0, 10)) + 'T00:00:00Z');
+  const iso = typeof today === 'string' ? today : ((today instanceof Date ? today : new Date()).toISOString().slice(0, 10));
+  const d = new Date(iso + 'T00:00:00Z');
   const k = () => d.toISOString().slice(0, 10);
   if (!(days[k()] && days[k()].ms > 0)) d.setUTCDate(d.getUTCDate() - 1);
   let n = 0;
@@ -1825,7 +1825,9 @@ const obDots = n => '<div class="ob-dots">' + Array.from({ length: 7 }, (_, i) =
 function obGo(name) { ob.step = OB_STEPS.indexOf(name); obRender(); }
 function obShow(force) {
   if (!force && (localStorage.getItem('czk_onboarded') || localStorage.getItem('fr_last'))) return;
-  ob.v2 = resolveObVariant(location.search, { czk_ob: localStorage.getItem('czk_ob') }, vid()) === 'v2';
+  const variant = resolveObVariant(location.search, { czk_ob: localStorage.getItem('czk_ob') }, vid());
+  try { localStorage.setItem('czk_ob', variant); } catch (e) {} // пин варианта A/B → стабильная выборка между визитами
+  ob.v2 = variant === 'v2';
   ob.step = 0; obRender(); $('onboard').classList.add('open');
 }
 function obRender() {
