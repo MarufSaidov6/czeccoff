@@ -553,7 +553,7 @@
     <div class="sled-streak" id="sledStreak"></div>
     <div class="sled-hero">
       <svg id="sledSvg" viewBox="0 0 322 150" preserveAspectRatio="none" aria-hidden="true"></svg>
-      <div class="sled-legend"><span class="dot"></span> красный — где ты возвращался</div>
+      <div class="sled-legend"><span class="dot"></span> красный — где взгляд возвращался</div>
       <button class="sled-play" id="sledShare" style="right:88px">↗ PNG</button>
       <button class="sled-play" id="sledPlay">▶ ритм</button>
     </div>
@@ -1141,6 +1141,8 @@ function renderSled(tr) {
   const stk = deriveStreak(); $('sledStreak').textContent = stk > 0 ? '🔥 День ' + stk + ' серии' : '';
   const svg = $('sledSvg'); svg.innerHTML = '';
   const past = loadTraces();
+  // геймификация после ценности: турнир — НЕ на первом «Следе» (один CTA «Ещё отрывок»), а со второго захода
+  if ($('sledTourn')) $('sledTourn').style.display = past.length === 0 ? 'none' : '';
   if (tr.short) {
     $('sledSmooth').textContent = '—';
     $('sledDelta').textContent = 'короткий след'; $('sledDelta').className = 'd';
@@ -1308,9 +1310,7 @@ function resolveObVariant(search, storage, vid) {
   if (m) return m[1];
   const saved = storage && storage.czk_ob;
   if (saved === 'v1' || saved === 'v2') return saved;
-  let h = 5381; const s = String(vid || '');
-  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
-  return (h % 2) ? 'v2' : 'v1';
+  return 'v2'; // A/B-рамп выключен: новый онбординг (v2) всем; старый доступен только явным ?ob=v1
 }
 function flushDay() {
   const dw = state.sessionWords - state.flushedW;
@@ -1875,11 +1875,11 @@ function obRender() {
   if (s === 'welcome') {
     if (ob.v2) {
       b.innerHTML = '<div class="ob-wm ob-wm-sm">Чехов<span>.</span></div>'
-        + '<div class="ob-fill ob-center" style="gap:24px"><div class="ob-fixframe">' + obRet() + '</div>'
-        + '<div class="ob-h1" style="text-align:center">Читай вдвое быстрее.</div>'
-        + '<div class="ob-promise" style="font-size:15px">Глаза на месте — бегущей строки нет.</div></div>'
-        + '<button class="btn primary obcta" id="obc">Читать</button><div class="ob-sublabel">без аккаунта</div>';
-      obFitWords(['читай', 'вдвое', 'быстрее']); obRsvp(['читай', 'вдвое', 'быстрее'], 150, true, obSetWord);
+        + '<div class="ob-fill ob-center" style="gap:22px"><div class="ob-fixframe">' + obRet() + '</div>'
+        + '<div class="ob-h1" style="text-align:center">Слово за словом.<br>Глаза не бегают по строке.</div>'
+        + '<div class="ob-promise" style="font-size:14px">Чехов показывает текст по одному слову в одной точке — книги, статьи, письма.</div></div>'
+        + '<button class="btn primary obcta" id="obc">Прочитать первое</button><div class="ob-sublabel">меньше минуты · без регистрации · пауза тапом</div>';
+      obFitWords(['глаза', 'стоят', 'текст', 'идёт']); obRsvp(['глаза', 'стоят', 'текст', 'идёт'], 170, true, obSetWord);
       $('obc').onclick = () => { track('demo'); obEnd(); openSample(OB_START.file, OB_START.title); };
       return;
     }

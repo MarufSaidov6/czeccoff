@@ -203,7 +203,7 @@ console.log('— Секция 13: A/B-вариант онбординга (resol
   t('OBV-03','сохранённый флаг', resolveObVariant('', { czk_ob: 'v2' }, 'x') === 'v2');
   t('OBV-04','URL важнее сохранённого', resolveObVariant('?ob=v1', { czk_ob: 'v2' }, 'x') === 'v1');
   t('OBV-05','детерминированность по vid', resolveObVariant('', {}, 'abc') === resolveObVariant('', {}, 'abc'));
-  t('OBV-06','оба варианта достижимы', (() => { const a = new Set(); for (let i = 0; i < 40; i++) a.add(resolveObVariant('', {}, 'v' + i)); return a.has('v1') && a.has('v2'); })());
+  t('OBV-06','дефолт без флага → v2 (A/B-рамп выключен)', resolveObVariant('', {}, 'кто угодно') === 'v2');
 }
 
 console.log('— Секция 14: анон-auth и best-wins (isExpired / shouldSubmit) —');
