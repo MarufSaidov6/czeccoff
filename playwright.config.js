@@ -6,7 +6,8 @@ const PORT = 8137;
 
 module.exports = defineConfig({
   testDir: './tests-e2e',
-  fullyParallel: false, // делят localStorage/Supabase — гоняем последовательно
+  fullyParallel: false,
+  workers: 1, // делят localStorage/Supabase — строго последовательно (без этого файлы идут параллельно → ложные падения)
   retries: 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
