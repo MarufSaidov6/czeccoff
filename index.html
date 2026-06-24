@@ -987,54 +987,88 @@ function updateStats() {
 }
 
 /* ============ Движок ============ */
+// Тренер: одно правило ±10 сл/мин, кламп 100..900. Чистое — зовётся из step (+1) и recordRegression (−1).
+function trainerAdjust(wpm, dir) {
+  const next = Math.min(900, Math.max(100, wpm + dir * 10));
+  if (next === wpm) return { wpm, persist: false, toast: null };
+  const toast = dir > 0
+    ? '<span class="up">▲ +10</span> · ' + next + ' сл/мин'
+    : '<span class="down">▼ −10</span> · ' + next + ' сл/мин';
+  return { wpm: next, persist: true, toast };
+}
+
+// Чистое ядро: одно решение на кадр. dt инъектируется оболочкой; читает срез state + settings,
+// возвращает patch (что присвоить state), done, тайминги и команды-эффекты. Без DOM/таймеров/now/localStorage.
+// ponytail: paceSamples дописывается на месте (горячий цикл — без O(n²) копий); единственный сайд-эффект ядра на state.
+function step(state, settings, dt) {
+  const commits = [];
+  let { idx, maxIdx, sessionMs, sessionWords, cleanMs, wpm, rampLeft } = state;
+  const end = state.tokens.length;
+  sessionMs += dt;
+
+  idx++;
+  if (idx >= end) return { patch: { idx: end - 1, sessionMs }, done: true, delayMs: null, blankAtMs: null, commits };
+  // промотать скрытые сепараторы за один кадр (sep выкл) — поведение прежней рекурсии return tick()
+  while (state.tokens[idx].sep && !settings.sep) {
+    idx++;
+    if (idx >= end) return { patch: { idx: end - 1, sessionMs }, done: true, delayMs: null, blankAtMs: null, commits };
+  }
+  const t = state.tokens[idx];
+
+  // честный счёт: слово засчитывается один раз при пересечении фронтира
+  if (!t.sep && idx > maxIdx) { sessionWords++; maxIdx = idx; }
+
+  // тренер: чистое время растёт на кадрах, +10 за минуту чистого чтения
+  if (settings.trainer) {
+    cleanMs += dt;
+    if (cleanMs >= 60000) {
+      cleanMs = 0;
+      const adj = trainerAdjust(wpm, 1);
+      wpm = adj.wpm;
+      if (adj.persist) commits.push({ type: 'persistWpm', wpm });
+      if (adj.toast) commits.push({ type: 'toast', html: adj.toast });
+    }
+  }
+
+  if (sessionWords % 30 === 0) commits.push({ type: 'save' });
+
+  let delayMs = wordDelay(t, 60000 / wpm);
+  if (rampLeft > 0) { delayMs *= 1 + rampLeft * 0.35; rampLeft--; }
+  // «След»: мгновенный темп на каждом новом слове (умный темп рисует провалы на паузах)
+  if (!t.sep && idx === maxIdx) state.paceSamples.push({ idx, wpm: Math.min(1200, 60000 / delayMs) });
+
+  // смена слов: пустой зазор (ISI) перед следующим словом снижает взаимную маскировку
+  // — на всех скоростях. fade гасит плавно, gap — резко, cut — без зазора. Не на сепараторе.
+  const plan = transitionPlan(delayMs, settings.trans);
+  const blankAtMs = (plan.blankAtMs !== null && !t.sep) ? plan.blankAtMs : null;
+
+  return { patch: { idx, maxIdx, sessionMs, sessionWords, cleanMs, wpm, rampLeft }, done: false, delayMs, blankAtMs, commits };
+}
+
+// Оболочка: now / таймеры / DOM / localStorage. Вся логика кадра — в step().
 function tick() {
   if (!state.playing) return;
   const now = performance.now();
   const dt = now - state.lastTick;
-  state.sessionMs += dt;
   state.lastTick = now;
-
-  state.idx++;
-  if (state.idx >= state.tokens.length) { state.idx = state.tokens.length - 1; finish(); return; }
-  const t = state.tokens[state.idx];
-
-  // честная статистика: слово засчитывается только при первом прохождении
-  if (!t.sep && state.idx > state.maxIdx) { state.sessionWords++; state.maxIdx = state.idx; }
-
-  // тренер: чистое время растёт только на новых словах
-  if (settings.trainer) {
-    state.cleanMs += dt;
-    if (state.cleanMs >= 60000) {
-      state.cleanMs = 0;
-      if (state.wpm < 900) {
-        state.wpm = Math.min(900, state.wpm + 10);
-        localStorage.setItem('fr_wpm', state.wpm);
-        toast('<span class="up">▲ +10</span> · ' + state.wpm + ' сл/мин');
-      }
-    }
-  }
-
-  if (t.sep && !settings.sep) { return tick(); }
+  const r = step(state, settings, dt);
+  Object.assign(state, r.patch);
+  if (r.done) { finish(); return; }
   renderWord();
   updateStats();
-  if (state.sessionWords % 30 === 0) { saveProgress(); flushDay(); }
-
-  let delay = wordDelay(t, 60000 / state.wpm);
-  if (state.rampLeft > 0) { delay *= 1 + state.rampLeft * 0.35; state.rampLeft--; }
-  // «След»: мгновенный темп на каждом НОВОМ слове (умный темп рисует провалы на паузах)
-  if (!t.sep && state.idx === state.maxIdx) state.paceSamples.push({ idx: state.idx, wpm: Math.min(1200, 60000 / delay) });
-
-  // смена слов: пустой зазор (ISI) перед следующим словом снижает взаимную
-  // маскировку — на всех скоростях. fade гасит плавно, gap — резко, cut — без зазора
-  const plan = transitionPlan(delay, settings.trans);
-  if (plan.blankAtMs !== null && !t.sep) {
+  for (const c of r.commits) {
+    if (c.type === 'save') { saveProgress(); flushDay(); }
+    else if (c.type === 'persistWpm') localStorage.setItem('fr_wpm', c.wpm);
+    else if (c.type === 'toast') toast(c.html);
+  }
+  if (r.blankAtMs !== null) {
     state.blankTimer = setTimeout(() => {
       const row = $('wordRow');
       row.style.transition = settings.trans === 'fade' ? 'opacity 90ms linear' : 'none';
       row.style.opacity = 0;
-    }, plan.blankAtMs);
+    }, r.blankAtMs);
   }
-  state.timer = setTimeout(tick, delay);
+  state.timer = setTimeout(tick, r.delayMs);
 }
 
 function play() {
@@ -1256,11 +1290,10 @@ function recordRegression(targetIdx) {
   try { localStorage.setItem('fr_reg_' + docKey(), JSON.stringify(state.regs)); } catch (e) {}
   if (settings.trainer) {
     state.cleanMs = 0;
-    if (state.wpm > 100) {
-      state.wpm = Math.max(100, state.wpm - 10);
-      localStorage.setItem('fr_wpm', state.wpm);
-      toast('<span class="down">▼ −10</span> · ' + state.wpm + ' сл/мин');
-    }
+    const adj = trainerAdjust(state.wpm, -1);
+    state.wpm = adj.wpm;
+    if (adj.persist) localStorage.setItem('fr_wpm', state.wpm);
+    if (adj.toast) toast(adj.toast);
   }
 }
 

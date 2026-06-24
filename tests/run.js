@@ -30,6 +30,8 @@ eval(grab(/function deriveStreak[\s\S]*?\n}/, 'deriveStreak'));
 eval(grab(/function resolveObVariant[\s\S]*?\n}/, 'resolveObVariant'));
 eval(grab(/function isExpired[\s\S]*?}/, 'isExpired'));
 eval(grab(/function shouldSubmit[\s\S]*?\n}/, 'shouldSubmit'));
+eval(grab(/function trainerAdjust[\s\S]*?\n}/, 'trainerAdjust'));
+eval(grab(/function step\(state, settings, dt\)[\s\S]*?\n}/, 'step'));
 
 // --- раннер ---
 let pass=0, fail=0; const fails=[];
@@ -217,6 +219,72 @@ console.log('— Секция 14: анон-auth и best-wins (isExpired / should
   t('SUB-03','база ниже → не пишем', shouldSubmit({ base: 4, effWpm: 900 }, { base: 10, effWpm: 200 }) === false);
   t('SUB-04','та же база, выше скорость → пишем', shouldSubmit({ base: 10, effWpm: 320 }, { base: 10, effWpm: 300 }) === true);
   t('SUB-05','та же база, ниже скорость → не пишем', shouldSubmit({ base: 10, effWpm: 280 }, { base: 10, effWpm: 300 }) === false);
+}
+
+console.log('— Секция 15: тренер — одно правило ±10 (trainerAdjust) —');
+{
+  let a = trainerAdjust(300, 1);
+  t('TRA-01','+1 ниже потолка: +10, persist, тост вверх', a.wpm===310 && a.persist===true && /▲/.test(a.toast));
+  a = trainerAdjust(900, 1);
+  t('TRA-02','+1 на потолке: без изменений', a.wpm===900 && a.persist===false && a.toast===null);
+  a = trainerAdjust(895, 1);
+  t('TRA-03','+1 у потолка кламп до 900', a.wpm===900 && a.persist===true);
+  a = trainerAdjust(300, -1);
+  t('TRA-04','−1 выше пола: −10, тост вниз', a.wpm===290 && a.persist===true && /▼/.test(a.toast));
+  a = trainerAdjust(100, -1);
+  t('TRA-05','−1 на полу: без изменений', a.wpm===100 && a.persist===false && a.toast===null);
+}
+
+console.log('— Секция 16: ядро движка — одно решение на кадр (step) —');
+{
+  const mk = (w,f={}) => ({w,end:false,comma:false,para:false,dlg:false,dlgStart:false,num:false,sep:false,...f});
+  const sep = () => ({w:'',sep:true,para:true});
+  const st = (over={}) => ({ tokens:[mk('раз'),mk('два'),mk('три')], idx:0, maxIdx:0, sessionWords:0, sessionMs:0, cleanMs:0, wpm:300, rampLeft:0, paceSamples:[], ...over });
+  // ядро берёт settings аргументом; в этом коде settings — единый глобал, его же и передаём
+  settings.smart=true; settings.sep=true; settings.trans='cut'; settings.trainer=false;
+
+  let r = step(st({ idx:0 }), settings, 100);
+  t('STP-01','новое слово: фронтир и счёт +1', r.patch.idx===1 && r.patch.maxIdx===1 && r.patch.sessionWords===1 && r.done===false);
+
+  r = step(st({ idx:2 }), settings, 100);
+  t('STP-02','конец текста: done, idx прижат', r.done===true && r.patch.idx===2);
+
+  r = step(st({ tokens:[mk('а'),mk('б'),mk('в'),mk('г')], idx:0, maxIdx:3 }), settings, 100);
+  t('STP-03','перечитка (idx<maxIdx): слово не задвоено', r.patch.sessionWords===0 && r.patch.maxIdx===3);
+
+  settings.sep=false;
+  r = step(st({ tokens:[mk('а'),sep(),mk('б')], idx:0 }), settings, 100);
+  t('STP-04','sep выкл: скрытый сепаратор промотан за кадр', r.patch.idx===2);
+  settings.sep=true;
+
+  settings.trans='gap';
+  r = step(st({ tokens:[mk('а'),sep(),mk('б')], idx:0 }), settings, 100);
+  t('STP-05','sep вкл: кадр-вдох, не считается, без ISI', r.patch.idx===1 && r.patch.sessionWords===0 && r.blankAtMs===null);
+  settings.trans='cut';
+
+  const rampOn = step(st({ idx:0, rampLeft:4 }), settings, 100);
+  const rampOff = step(st({ idx:0, rampLeft:0 }), settings, 100);
+  t('STP-06','разгон удлиняет кадр и убывает', rampOn.delayMs > rampOff.delayMs && rampOn.patch.rampLeft===3);
+
+  const sCore = st({ idx:0, paceSamples:[] });
+  step(sCore, settings, 100);
+  t('STP-07','новое слово даёт образец темпа', sCore.paceSamples.length===1);
+
+  settings.trainer=true;
+  r = step(st({ idx:0, cleanMs:59950, wpm:300 }), settings, 100);
+  t('STP-08','тренер: минута чистого → +10, сброс cleanMs, команда persist', r.patch.wpm===310 && r.patch.cleanMs===0 && r.commits.some(c=>c.type==='persistWpm'));
+  settings.trainer=false;
+
+  r = step(st({ idx:0, sessionMs:1000 }), settings, 250);
+  t('STP-09','sessionMs накапливает dt', r.patch.sessionMs===1250);
+
+  r = step(st({ tokens:Array.from({length:40},(_,i)=>mk('w'+i)), idx:28, maxIdx:28, sessionWords:29 }), settings, 100);
+  t('STP-10','каждые 30 слов → команда save', r.patch.sessionWords===30 && r.commits.some(c=>c.type==='save'));
+
+  settings.trans='gap';
+  r = step(st({ idx:0 }), settings, 100);
+  t('STP-11','ISI: gap на не-сепараторе даёт blankAtMs', typeof r.blankAtMs==='number');
+  settings.trans='cut';
 }
 
 console.log('\n========================================');
